@@ -1,0 +1,37 @@
+{
+  "kind": "youtube#videoListResponse",
+  "items": [
+    {
+      "id": "videoArt001",
+      "snippet": {
+        "title": "Example Song",
+        "channelTitle": "Example Artist - Topic"
+      },
+      "contentDetails": {
+        "duration": "PT3M20S",
+        "licensedContent": true
+      },
+      "status": {
+        "embeddable": true,
+        "privacyStatus": "public",
+        "uploadStatus": "processed"
+      }
+    },
+    {
+      "id": "videoAudio01",
+      "snippet": {
+        "title": "Example Artist - Example Song (Official Audio)",
+        "channelTitle": "Example Artist"
+      },
+      "contentDetails": {
+        "duration": "PT3M21S",
+        "licensedContent": false
+      },
+      "status": {
+        "embeddable": true,
+        "privacyStatus": "public",
+        "uploadStatus": "processed"
+      }
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "kind": "youtube#searchListResponse",
+  "items": [
+    {
+      "id": {
+        "kind": "youtube#video",
+        "videoId": "videoArt001"
+      },
+      "snippet": {
+        "title": "Example Song",
+        "channelTitle": "Example Artist - Topic"
+      }
+    },
+    {
+      "id": {
+        "kind": "youtube#video",
+        "videoId": "videoAudio01"
+      },
+      "snippet": {
+        "title": "Example Artist - Example Song (Official Audio)",
+        "channelTitle": "Example Artist"
+      }
+    }
+  ]
+}

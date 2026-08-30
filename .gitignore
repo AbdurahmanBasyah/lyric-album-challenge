@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
 
 # next.js
 /.next/
@@ -22,7 +24,25 @@
 
 # misc
 .DS_Store
+Thumbs.db
+desktop.ini
 *.pem
+
+# editor and local tooling state
+.vscode/
+.idea/
+.eslintcache
+*.swp
+*.swo
+*.orig
+*.bak
+
+# local caches and temporary files
+/.cache/
+/tmp/
+/temp/
+*.pid
+*.stacktrace
 
 # debug
 npm-debug.log*
@@ -32,6 +52,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +60,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local AI collaboration records
+/ITERATION_LOG.md
+/WORKER_CONTRACT.md
+/WORKER_PLAN.md
+/SESSION_*.md
+
+# Unrelated personal artifacts accidentally copied into the repository
+/PROBLEM PLURALISME AGAMA.pptx
