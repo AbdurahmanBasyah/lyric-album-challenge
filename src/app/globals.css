@@ -2,21 +2,21 @@
 
 :root {
   /* Neon Prism Glass: neutral space, smoked surfaces, functional accents. */
-  --background: #11141b;
-  --surface: #181c24;
-  --surface-raised: #20242d;
-  --foreground: #f4f5f7;
-  --muted: #858c98;
-  --muted-strong: #b8bdc7;
-  --border: rgba(255, 255, 255, 0.14);
-  --border-strong: rgba(255, 255, 255, 0.24);
-  --accent: #d0bcff;
-  --accent-strong: #e9ddff;
-  --accent-ink: #23005c;
-  --teal: #7cf5bc;
-  --blue: #67b7ff;
-  --danger: #ff647c;
-  --focus: #e9ddff;
+  --background: #0f1118;
+  --surface: #171a24;
+  --surface-raised: #222638;
+  --foreground: #f6f4fa;
+  --muted: #85899a;
+  --muted-strong: #c3c3d0;
+  --border: rgba(224, 219, 255, 0.18);
+  --border-strong: rgba(224, 219, 255, 0.34);
+  --accent: #d7b5ff;
+  --accent-strong: #f0ddff;
+  --accent-ink: #24113e;
+  --teal: #82f4bd;
+  --blue: #8297ff;
+  --danger: #ff7894;
+  --focus: #f0ddff;
 
   --prism-purple: #d767ff;
   --prism-purple-deep: #a940d3;
@@ -65,8 +65,9 @@ body {
   min-height: 100%;
   overflow-x: hidden;
   background:
-    radial-gradient(circle at 15% 85%, rgba(194, 76, 255, 0.16), transparent 30rem),
-    radial-gradient(circle at 85% 5%, rgba(108, 242, 178, 0.13), transparent 30rem),
+    radial-gradient(circle at 8% 92%, rgba(194, 76, 255, 0.24), transparent 32rem),
+    radial-gradient(circle at 88% 0%, rgba(108, 242, 178, 0.19), transparent 32rem),
+    radial-gradient(circle at 58% 36%, rgba(111, 93, 255, 0.08), transparent 28rem),
     var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), sans-serif;
@@ -233,8 +234,11 @@ select {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 0.7rem 0.85rem;
-  background: rgba(17, 20, 27, 0.42);
-  backdrop-filter: blur(14px) saturate(115%);
+  background:
+    linear-gradient(105deg, rgba(215, 103, 255, 0.045), transparent 35%, rgba(124, 245, 188, 0.04)),
+    rgba(17, 20, 27, 0.48);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055), 0 1rem 3rem rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(14px) saturate(125%);
   -webkit-backdrop-filter: blur(14px) saturate(115%);
 }
 
@@ -632,10 +636,14 @@ select {
   border: 1px solid var(--border-strong);
   border-radius: clamp(1.5rem, 3vw, 2rem);
   padding: clamp(1.2rem, 3vw, 2.2rem);
-  background: linear-gradient(145deg, rgba(31, 37, 78, 0.9), rgba(10, 14, 39, 0.95));
+  background:
+    radial-gradient(circle at 84% 8%, rgba(215, 103, 255, 0.18), transparent 15rem),
+    radial-gradient(circle at 8% 92%, rgba(124, 245, 188, 0.14), transparent 18rem),
+    linear-gradient(145deg, rgba(38, 43, 91, 0.9), rgba(10, 14, 39, 0.96));
   box-shadow:
-    0 2rem 6rem rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(240, 255, 246, 0.07);
+    0 2rem 6rem rgba(0, 0, 0, 0.34),
+    0 0 2.5rem rgba(176, 108, 255, 0.08),
+    inset 0 1px 0 rgba(240, 255, 246, 0.09);
 }
 
 .puzzle-card::before {
