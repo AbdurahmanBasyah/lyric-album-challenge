@@ -235,3 +235,23 @@ payload leakage is guarded by `npm run audit:privacy`. The production build
 and `next start` smoke check pass with security headers, no-store API behavior,
 documented HTTPS environment requirements, and the accepted process-local
 challenge-store limitation.
+
+## Milestone 10 — Canonical experience completion
+
+- [x] M10-CANONICAL-01: canonical landing and public-playlist pre-start
+  visual system.
+- [x] M10-CANONICAL-02: canonical gameplay interaction, secure playback
+  warmup, and Round Complete architecture.
+- [x] M10-CANONICAL-03: masking fairness, anchor coverage, and responsive
+  gameplay correction.
+- [x] M10-CANONICAL-03-POLISH-01: remove duplicate solved feedback and fix
+  one/two-letter inline input clipping.
+- [ ] M10-CANONICAL-04-A: Perfect/Streak celebration overlays and sequencing.
+- [ ] M10-CANONICAL-04-B: canonical Final Results metrics, track list, and
+  replay/source actions.
+- [ ] M10-CANONICAL-04-C: Motion Lab, reduced-motion validation, and final
+  responsive/accessibility QA.
+
+**Exit:** the canonical FillTheLyrics experience is implemented and audited
+across celebrations, Final Results, motion validation, responsive behavior,
+accessibility, and the existing gameplay/security boundaries.

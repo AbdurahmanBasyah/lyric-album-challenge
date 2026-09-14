@@ -120,6 +120,9 @@ describe("challenge YouTube playback affordance", () => {
     expect(source).toContain('role="status"');
     expect(source).toContain('aria-live="polite"');
     expect(source).toContain('aria-atomic="true"');
+    expect(source).toContain("ftl-playback-skeleton");
+    expect(source).toContain("status === \"unavailable\" || status === \"error\"");
+    expect(source).not.toContain("Reload YouTube player");
     expect(source).toContain("useReducedMotion");
     expect(source).toContain("reducedMotion ? 0");
     expect(source).toContain("mountedRef.current");

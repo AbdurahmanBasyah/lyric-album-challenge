@@ -95,6 +95,19 @@ export type ChallengePlaybackResponse = Readonly<{
   playback: ChallengePlaybackView;
 }>;
 
+/**
+ * Non-sensitive acknowledgement returned while an active question warms
+ * optional terminal playback. No provider metadata crosses this boundary.
+ */
+export type ChallengePlaybackWarmupView = Readonly<{
+  provider: "youtube";
+  status: "accepted";
+}>;
+
+export type ChallengePlaybackWarmupResponse = Readonly<{
+  warmup: ChallengePlaybackWarmupView;
+}>;
+
 export type ChallengeQuestionView = Readonly<{
   id: string;
   attempt: AttemptNumber;

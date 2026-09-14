@@ -10,7 +10,10 @@ import type {
 import {
   applyContinueResult,
   findPlayableQuestionIndex,
+  getGameplayAtmosphereIntensity,
   getActiveTitleHint,
+  getAttemptStartGapId,
+  getNextGapAfterAttempt,
   getProgressMessage,
 } from "./challenge-game";
 import { buildCelebrationQueue } from "./challenge-celebration";
@@ -132,8 +135,66 @@ describe("challenge game state helpers", () => {
 
   it("uses encouraging partial-progress feedback", () => {
     expect(getProgressMessage(challenge().questions[1], true)).toBe(
-      "0 of 4 words solved. Another clue unlocked.",
+      "Another clue unlocked.",
     );
+    expect(getProgressMessage(challenge().questions[1])).toBe("Keep going.");
+  });
+
+  it("maps attempts to the canonical stage atmosphere", () => {
+    const active = challenge().questions[1];
+
+    expect(getGameplayAtmosphereIntensity(active)).toBe("expert");
+    expect(getGameplayAtmosphereIntensity({ ...active, attempt: 2 })).toBe("hard");
+    expect(getGameplayAtmosphereIntensity({ ...active, attempt: 3 })).toBe("medium");
+    expect(getGameplayAtmosphereIntensity({ ...active, attempt: 4 })).toBe("easy");
+    expect(
+      getGameplayAtmosphereIntensity(active, {
+        result: "solved",
+        questionId: active.id,
+        attemptsUsed: 1,
+        progress: active.progress,
+        reveal: {
+          lines: ["one", "two", "three", "four"],
+          trackName: "Track",
+          artistNames: ["Artist"],
+          startTimestampMs: 0,
+        },
+        perfect: true,
+        streak: 0,
+        questionCount: 2,
+        completedQuestionCount: 2,
+        complete: true,
+      }),
+    ).toBe("solved");
+  });
+
+  it("keeps the active target on a surviving next-attempt gap", () => {
+    const previous = challenge().questions[1];
+    const next = {
+      ...previous,
+      attempt: 2 as const,
+      hiddenTokenIds: ["l1t0", "l2t0", "l3t0"],
+    };
+
+    expect(getNextGapAfterAttempt(previous, next, "l0t0")).toBe("l1t0");
+    expect(getNextGapAfterAttempt(previous, next, "l3t0")).toBe("l1t0");
+    expect(getNextGapAfterAttempt(previous, { ...next, hiddenTokenIds: [] }, "l0t0")).toBeNull();
+  });
+
+  it("starts one opaque warmup per active question and targets the first gap at boundaries", () => {
+    const active = challenge().questions[1];
+    expect(getAttemptStartGapId(active)).toBe("l0t0");
+
+    const source = readFileSync(
+      resolve(process.cwd(), "src/components/challenge/challenge-game.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("requestChallengePlaybackWarmup");
+    expect(source).toContain("startChallengePlaybackWarmup");
+    expect(source).toContain("warmupChallengeId");
+    expect(source).toContain("warmupQuestionId");
+    expect(source).not.toContain("currentQuestion.track");
+    expect(source).not.toContain("currentQuestion.reveal?.trackName");
   });
 
   it("keeps terminal celebration facts presentation-only and one-shot", () => {
@@ -161,13 +222,38 @@ describe("challenge game state helpers", () => {
     ]);
   });
 
+  it("keeps the explicit presentation sequence ordered before Round Complete", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/components/challenge/challenge-game.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("presentationPhase");
+    expect(source).toContain("celebrating-perfect");
+    expect(source).toContain("celebrating-streak");
+    expect(source).toContain('presentationPhase === "round-complete"');
+    expect(source).toContain("phaseForCelebrationEvent");
+    expect(source).toContain("roundResult !== null");
+  });
+
+  it("clears solved feedback while preserving the primary result heading", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/components/challenge/challenge-game.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain('result.result === "solved"');
+    expect(source).toContain('? ""');
+    expect(source).not.toContain('? "You got it."');
+  });
+
   it("includes duplicate-submit, recovery, live feedback, and no active track metadata", () => {
     const source = readFileSync(
       resolve(process.cwd(), "src/components/challenge/challenge-game.tsx"),
       "utf8",
     );
 
-    expect(source).toContain("if (isSubmitting");
+    expect(source).toContain("isSubmitting ||");
     expect(source).toContain("readRecoveryPointer");
     expect(source).toContain("requestChallengePlayback");
     expect(source).toContain("onPlaybackRequest={(signal)");
@@ -181,9 +267,20 @@ describe("challenge game state helpers", () => {
     expect(source).toContain('aria-label="Lyric answer form"');
     expect(source).toContain('aria-labelledby="challenge-game-heading"');
     expect(source).toContain('aria-label="Challenge navigation"');
-    expect(source).toContain("Final clue · song title");
+    expect(source).toContain("One last clue");
+    expect(source).toContain("Song title:");
+    expect(source).toContain("Check Words");
+    expect(source).toContain("onDraftChange");
+    expect(source).toContain('type="button"');
+    expect(source).toContain("inline editing usable");
+    expect(source).not.toContain(["Answer", "Composer"].join(""));
+    expect(source).not.toContain(["answer", "-composer"].join(""));
+    expect(source).toContain("Leave Game");
+    expect(source).toContain("BrandWordmark");
+    expect(source).toContain("StageAtmosphere");
     expect(source).toContain("getActiveTitleHint");
     expect(source).not.toContain("currentQuestion.reveal?.trackName");
+    expect(source).not.toContain("sourceName");
     expect(source).not.toContain("multiplier");
   });
 });

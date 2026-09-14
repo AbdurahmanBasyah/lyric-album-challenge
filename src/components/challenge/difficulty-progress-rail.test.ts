@@ -15,6 +15,10 @@ const source = readFileSync(
   ),
   "utf8",
 );
+const styles = readFileSync(
+  resolve(process.cwd(), "src/app/globals.css"),
+  "utf8",
+);
 
 describe("difficulty progress rail", () => {
   it("maps the requested labels to attempts one through four", () => {
@@ -44,5 +48,17 @@ describe("difficulty progress rail", () => {
     expect(source).toContain("↓");
     expect(source).toContain("lg:hidden");
     expect(source).toContain("lg:flex");
+    expect(source).toContain('state === "completed" ? "•" : attempt');
+    expect(source).toContain('return "past attempt"');
+    expect(styles).toContain(
+      ".ftl-difficulty-rail__steps--mobile .ftl-difficulty-step {\n    flex-direction: column;",
+    );
+    expect(styles).toContain(
+      ".ftl-difficulty-rail__steps--mobile .ftl-difficulty-step__status {\n    overflow: visible;",
+    );
+    expect(styles).not.toContain(
+      ".ftl-difficulty-rail__steps--mobile .ftl-difficulty-step__status {\n    overflow: hidden;",
+    );
+    expect(source).not.toContain('state === "completed" ? "✓"');
   });
 });

@@ -65,6 +65,20 @@ function mapResolverUnavailableReason(
     return reason;
   }
 
+  // Resolver internals use underscore names; the browser contract uses the
+  // readable hyphenated categories.
+  if (reason === "no_candidate") {
+    return "no-candidate";
+  }
+
+  if (reason === "low_confidence") {
+    return "low-confidence";
+  }
+
+  if (reason === "rate_limited") {
+    return "rate-limited";
+  }
+
   // These resolver-only details are deliberately collapsed at the playback
   // boundary so provider diagnostics never become a browser contract.
   return "unavailable";

@@ -4,8 +4,17 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
+import { BrandWordmark } from "../fillthelyrics/visual/brand-wordmark";
+import { HandwrittenAnnotation } from "../fillthelyrics/visual/handwritten-annotation";
+import { StageAtmosphere } from "../fillthelyrics/visual/stage-atmosphere";
+import {
+  getBestSolvedSongStreak,
+  getPerfectQuestionCount,
+  isPerfectQuestion,
+} from "../../lib/challenge/challenge-result-metrics";
 import type {
   ChallengeGuessFinishedView,
+  ChallengeQuestionView,
   ChallengeView,
 } from "../../types/challenge";
 import {
@@ -45,27 +54,26 @@ export function RoundResult({
 
   return (
     <motion.section
-      className="glass-panel glass-panel-strong rounded-[1.5rem] p-5 sm:p-8"
+      className={`ftl-round-complete ftl-round-complete--${solved ? "solved" : "failed"}`}
       initial={{ opacity: 0, y: reducedMotion ? 0 : 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: reducedMotion ? 0 : 0.34, ease: "easeOut" }}
       aria-labelledby="round-result-heading"
       role="region"
     >
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent)]">
-        {solved ? "Solved" : "Round complete"}
-      </p>
-      <h2
-        id="round-result-heading"
-        className="mt-3 text-[clamp(2rem,5vw,3.5rem)] font-semibold leading-tight tracking-[-0.05em] text-[var(--foreground)]"
-      >
-        {solved ? "You got it." : "Here is the full fragment."}
-      </h2>
+      <div className="ftl-round-complete__content">
+        <p className="ftl-round-complete__eyebrow">
+          <span aria-hidden="true" className="ftl-round-complete__eyebrow-mark" />
+          {solved ? "Round solved" : "Round complete"}
+        </p>
+        <h2 id="round-result-heading" className="ftl-round-complete__heading">
+          {solved ? "You got it." : "Here is the full fragment."}
+        </h2>
 
-      <div className="mt-7 space-y-3 border-l-2 border-[rgba(157,240,209,0.5)] pl-4 sm:pl-6">
+      <div className="ftl-round-complete__lyrics" aria-label="Full four-line lyric fragment">
         {result.reveal.lines.map((line, index) => (
           <p
-            className="text-lg leading-8 text-[var(--foreground)] sm:text-xl"
+            className="ftl-round-complete__lyric-line"
             key={`${result.questionId}-reveal-${index}`}
           >
             {line}
@@ -73,24 +81,41 @@ export function RoundResult({
         ))}
       </div>
 
-      <p className="mt-7 text-base font-semibold text-[var(--foreground)]">
-        {result.reveal.trackName}
-        <span className="font-normal text-[var(--muted-strong)]">
-          {" — "}
-          {result.reveal.artistNames.join(", ")}
-        </span>
-      </p>
-      <p className="mt-2 text-sm text-[var(--muted)]">
-        {result.progress.solved} solved by you · {result.progress.revealed} revealed as hints · {result.attemptsUsed} {result.attemptsUsed === 1 ? "attempt" : "attempts"}
-      </p>
+        <div className="ftl-round-complete__identity">
+          <p className="ftl-round-complete__track">
+            {result.reveal.trackName}
+          </p>
+          <p className="ftl-round-complete__artist">
+            {result.reveal.artistNames.join(", ")}
+          </p>
+        </div>
 
-      <ChallengePlayback
-        reveal={result.reveal}
-        requestPlayback={onPlaybackRequest}
-      />
+      <dl className="ftl-round-complete__stats" aria-label="Round performance">
+        <div>
+          <dt>Attempts</dt>
+          <dd>{result.attemptsUsed} / 4</dd>
+        </div>
+        <div>
+          <dt>Solved</dt>
+          <dd>{result.progress.solved}</dd>
+        </div>
+        <div>
+          <dt>Hints</dt>
+          <dd>{result.progress.revealed}</dd>
+        </div>
+      </dl>
+      </div>
 
+      <div className="ftl-round-complete__media">
+        <ChallengePlayback
+          reveal={result.reveal}
+          requestPlayback={onPlaybackRequest}
+        />
+      </div>
+
+      <div className="ftl-round-complete__actions">
       <button
-        className="mt-8 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[var(--accent)] px-6 text-sm font-bold text-[var(--accent-ink)] transition-transform hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-65 sm:w-auto"
+        className="result-action ftl-round-complete__advance"
         type="button"
         disabled={advancing}
         aria-busy={advancing}
@@ -103,171 +128,241 @@ export function RoundResult({
             ? "See results"
             : "Next song"}
       </button>
+      </div>
     </motion.section>
   );
 }
 
-function ResultsContent({ challenge }: { challenge: ChallengeView }) {
-  const sourceName = challenge.source.displayName ??
+export type ChallengeResultTrack = Readonly<{
+  questionId: string;
+  index: number;
+  title: string | null;
+  artist: string | null;
+  score: number | null;
+  solved: boolean;
+  perfect: boolean;
+  status: ChallengeQuestionView["status"];
+}>;
+
+export type ChallengeResultMetrics = Readonly<{
+  finalScore: number | null;
+  solvedCount: number;
+  perfectCount: number;
+  bestStreak: number;
+}>;
+
+/**
+ * Derive display metrics from the authoritative challenge view. The total
+ * score is never recalculated in the browser: incomplete views intentionally
+ * return null, while complete views use the server-owned score total.
+ */
+export function deriveChallengeResultMetrics(
+  challenge: Pick<ChallengeView, "questions" | "questionCount" | "complete" | "score">,
+): ChallengeResultMetrics {
+  // Per-question progress remains server-rendered source data: question.progress.solved
+  // and question.progress.revealed are never used to recalculate the score.
+  return Object.freeze({
+    finalScore:
+      challenge.complete && challenge.score !== undefined
+        ? challenge.score.total
+        : null,
+    solvedCount: challenge.questions.filter(
+      (question) => question.status === "solved",
+    ).length,
+    perfectCount: getPerfectQuestionCount(challenge.questions),
+    bestStreak: getBestSolvedSongStreak(challenge.questions),
+  });
+}
+
+/** Build one compact row for every challenge question, preserving order. */
+export function buildChallengeResultTracks(
+  challenge: ChallengeView,
+): readonly ChallengeResultTrack[] {
+  const score = challenge.complete ? challenge.score : undefined;
+  const scoreByQuestionId = new Map(
+    score === undefined
+      ? []
+      : score.songs.map((song) => [song.questionId, song.score] as const),
+  );
+
+  return Object.freeze(
+    challenge.questions.map((question, index) => {
+      const reveal = question.reveal;
+      return Object.freeze({
+        questionId: question.id,
+        index,
+        title: reveal?.trackName ?? null,
+        artist: reveal?.artistNames.join(", ") ?? null,
+        score: scoreByQuestionId.get(question.id) ?? null,
+        solved: question.status === "solved",
+        perfect: isPerfectQuestion(question),
+        status: question.status,
+      });
+    }),
+  );
+}
+
+function resultSourceName(challenge: ChallengeView): string {
+  return challenge.source.displayName ??
     (challenge.source.kind === "album"
       ? "Selected album"
       : challenge.source.kind === "public-playlist"
         ? "Imported playlist"
         : "Selected playlist");
+}
+
+function resultHeadline(metrics: ChallengeResultMetrics): string {
+  if (metrics.solvedCount === 0) {
+    return "KEEP THE SONGS CLOSE.";
+  }
+
+  if (metrics.perfectCount > 0) {
+    return "YOU KNEW MORE THAN YOU THOUGHT.";
+  }
+
+  return "YOU FOUND THE MOMENT.";
+}
+
+function ResultsContent({ challenge }: { challenge: ChallengeView }) {
+  const sourceName = resultSourceName(challenge);
   const isPublicPlaylist = challenge.source.kind === "public-playlist";
-  const solvedCount = challenge.questions.filter(
-    (question) => question.status === "solved",
-  ).length;
   const retryUrl = createChallengeIntroUrl(challenge.source);
   const score = challenge.complete ? challenge.score : undefined;
+  const metrics = deriveChallengeResultMetrics({
+    ...challenge,
+    score,
+  });
+  const tracks = buildChallengeResultTracks(challenge);
 
   return (
     <>
-      <p className="eyebrow">
-        <span className="eyebrow-line" aria-hidden="true" />
-        Challenge results
+      <div className="ftl-results-graffiti" aria-hidden="true">
+        <HandwrittenAnnotation
+          text="Same song, closer"
+          tone="purple"
+          rotateDeg={-5}
+          underline="single"
+          className="ftl-results-graffiti__left"
+        />
+        <HandwrittenAnnotation
+          text="On a roll"
+          tone="mint"
+          rotateDeg={4}
+          underline="none"
+          className="ftl-results-graffiti__right"
+        />
+      </div>
+
+      <p className="ftl-results-kicker">
+        <span className="ftl-results-kicker__line" aria-hidden="true" />
+        Challenge complete
       </p>
-      <h1
-        className="mt-5 max-w-[13ch] text-[clamp(2.8rem,7vw,5.7rem)] font-[560] leading-[0.96] tracking-[-0.075em] text-[var(--foreground)]"
-        id="challenge-results-heading"
-      >
-        {sourceName}
-      </h1>
-      {score ? (
+
+      <div className="ftl-results-composition">
         <section
-          className="mt-6 grid gap-5 rounded-[1.5rem] border border-[rgba(216,185,255,0.32)] bg-[linear-gradient(115deg,rgba(216,185,255,0.1),rgba(157,240,209,0.05))] p-5 shadow-[inset_0_1px_0_rgba(246,242,255,0.06)] sm:grid-cols-[minmax(10rem,0.7fr)_minmax(0,1fr)] sm:p-6"
-          aria-labelledby="challenge-score-heading"
+          className="ftl-results-performance"
+          aria-labelledby="challenge-results-heading"
         >
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent)]">
-              Final score
-            </p>
-            <p
-              className="mt-2 text-[clamp(2.8rem,8vw,4.8rem)] font-semibold leading-none tracking-[-0.07em] text-[var(--foreground)]"
-              id="challenge-score-heading"
-            >
-              {score.total}
-              <span className="ml-1 text-lg font-medium tracking-normal text-[var(--muted-strong)]">
-                / 100
-              </span>
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[var(--muted-strong)]">
-              {solvedCount} of {challenge.questionCount} songs solved.
+          <p className="ftl-results-label">FINAL RESULTS</p>
+          <h1 id="challenge-results-heading" className="ftl-results-headline">
+            {resultHeadline(metrics)}
+          </h1>
+          <h2 className="ftl-results-source">{sourceName}</h2>
+
+          <div className="ftl-results-score-block" aria-labelledby="challenge-score-heading">
+            <p className="ftl-results-score-label">Final score</p>
+            {metrics.finalScore !== null ? (
+              <p className="ftl-results-score" id="challenge-score-heading">
+                <span>{metrics.finalScore}</span>
+                <span className="ftl-results-score__scale">/ 100</span>
+              </p>
+            ) : (
+              <p className="ftl-results-score ftl-results-score--pending" id="challenge-score-heading">
+                —
+              </p>
+            )}
+            <p className="ftl-results-score-detail">
+              {metrics.finalScore === null
+                ? "No score yet — finish the challenge to see your score."
+                : "Across the songs you played."}
             </p>
           </div>
 
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--muted)]">
-              Song scores
-            </p>
-            <ol className="mt-3 grid gap-2">
-              {score.songs.map((song, index) => {
-                const question = challenge.questions.find(
-                  (candidate) => candidate.id === song.questionId,
-                );
-                const label = question?.reveal?.trackName ?? `Song ${index + 1}`;
-
-                return (
-                  <li
-                    className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[rgba(17,22,51,0.54)] px-3 py-2.5 text-sm"
-                    key={song.questionId}
-                  >
-                    <span className="min-w-0 truncate text-[var(--foreground)]">
-                      {label}
-                    </span>
-                    <span className="flex-none whitespace-nowrap font-semibold text-[var(--accent)]">
-                      {song.score} / 100
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-        </section>
-      ) : (
-        <p className="mt-5 text-base leading-7 text-[var(--muted-strong)]">
-          {solvedCount} of {challenge.questionCount} songs solved. No score yet
-          — finish the challenge to see your score.
-        </p>
-      )}
-
-      <ol className="mt-10 grid gap-4">
-        {challenge.questions.map((question, index) => (
-          <li
-            className="glass-panel rounded-[1.25rem] p-5 sm:p-6"
-            key={question.id}
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
-                  Song {index + 1}
-                </p>
-                <h2 className="mt-2 text-xl font-semibold text-[var(--foreground)]">
-                  {question.reveal?.trackName ?? "Unfinished song"}
-                </h2>
-                {question.reveal && (
-                  <>
-                    <p className="mt-1 text-sm text-[var(--muted-strong)]">
-                      {question.reveal.artistNames.join(", ")}
-                    </p>
-                    <div className="mt-4 space-y-1 border-l border-[var(--border-strong)] pl-3">
-                      {question.reveal.lines.map((line, lineIndex) => (
-                        <p
-                          className="text-sm leading-6 text-[var(--muted-strong)]"
-                          key={`${question.id}-result-line-${lineIndex}`}
-                        >
-                          {line}
-                        </p>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-              <span className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-[0.1em] ${
-                question.status === "solved"
-                  ? "border-[rgba(157,240,209,0.42)] text-[var(--teal)]"
-                  : question.status === "failed"
-                    ? "border-[rgba(255,181,140,0.35)] text-[#ffc0a0]"
-                    : "border-[var(--border)] text-[var(--muted)]"
-              }`}>
-                {question.status}
-              </span>
+          <dl className="ftl-results-metrics" aria-label="Challenge summary">
+            <div>
+              <dt>Solved</dt>
+              <dd>{metrics.solvedCount} / {challenge.questionCount}</dd>
             </div>
+            <div>
+              <dt>Perfect</dt>
+              <dd>{metrics.perfectCount}</dd>
+            </div>
+            <div>
+              <dt>Best streak</dt>
+              <dd>{metrics.bestStreak}</dd>
+            </div>
+          </dl>
+        </section>
 
-            <dl className="mt-5 grid grid-cols-3 gap-3 border-t border-[var(--border)] pt-4 text-sm">
-              <div>
-                <dt className="text-[var(--muted)]">Attempts</dt>
-                <dd className="mt-1 font-semibold text-[var(--foreground)]">{question.attempt}</dd>
-              </div>
-              <div>
-                <dt className="text-[var(--muted)]">Solved</dt>
-                <dd className="mt-1 font-semibold text-[var(--foreground)]">{question.progress.solved}</dd>
-              </div>
-              <div>
-                <dt className="text-[var(--muted)]">Hints</dt>
-                <dd className="mt-1 font-semibold text-[var(--foreground)]">{question.progress.revealed}</dd>
-              </div>
-            </dl>
-          </li>
-        ))}
-      </ol>
-
-      <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-        <Link
-          className="result-action inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[var(--accent)] px-6 text-sm font-bold text-[var(--accent-ink)] no-underline sm:w-auto"
-          href={retryUrl}
+        <section
+          className="ftl-results-track-list"
+          aria-labelledby="challenge-track-list-heading"
         >
-          Retry this source
+          <div className="ftl-results-track-list__header">
+            <p className="ftl-results-label" id="challenge-track-list-heading">
+              TRACK LIST
+            </p>
+            <span>
+              <span className="ftl-results-track-list__scores-label">Song scores</span>
+              <span aria-hidden="true"> · </span>
+              {challenge.questionCount} songs
+            </span>
+          </div>
+          <ol>
+            {tracks.map((track) => (
+              <li className="ftl-results-track" key={track.questionId}>
+                <span className="ftl-results-track__index">
+                  {String(track.index + 1).padStart(2, "0")}
+                </span>
+                <span className="ftl-results-track__identity">
+                  <span className="ftl-results-track__title">
+                    {track.title ?? "In-progress song"}
+                  </span>
+                  <span className="ftl-results-track__artist">
+                    {track.artist ?? "Details appear after the round."}
+                  </span>
+                </span>
+                <span className="ftl-results-track__status">
+                  <span>{track.solved ? "SOLVED" : track.status === "failed" ? "FAILED" : "IN PROGRESS"}</span>
+                  {track.perfect && (
+                    <span className="ftl-results-track__perfect" aria-label="Perfect, solved on Expert">
+                      PERFECT
+                    </span>
+                  )}
+                </span>
+                <span className="ftl-results-track__score" aria-label={track.score === null ? "Score pending" : `Score ${track.score} out of 100`}>
+                  {track.score === null ? "—" : `${track.score} / 100`}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </div>
+
+      <div className="ftl-results-actions" aria-label="Result actions">
+        <Link className="ftl-results-action ftl-results-action--primary" href={retryUrl}>
+          Play Again
+          <span aria-hidden="true">→</span>
         </Link>
         <Link
-          className="result-action inline-flex min-h-12 w-full items-center justify-center rounded-full border border-[var(--border-strong)] px-6 text-sm font-semibold text-[var(--foreground)] no-underline sm:w-auto"
+          className="ftl-results-action ftl-results-action--secondary"
           href={isPublicPlaylist ? "/" : "/albums"}
         >
-          {isPublicPlaylist ? "Import another playlist" : "Choose another source"}
+          Use Another Playlist
         </Link>
         {!challenge.complete && (
           <Link
-            className="result-action inline-flex min-h-12 w-full items-center justify-center rounded-full border border-[var(--border-strong)] px-6 text-sm font-semibold text-[var(--foreground)] no-underline sm:w-auto"
+            className="ftl-results-action ftl-results-action--tertiary"
             href={`/play/${encodeURIComponent(challenge.id)}`}
           >
             Continue challenge
@@ -324,40 +419,65 @@ export function ChallengeResults({ challengeId }: { challengeId: string }) {
   const errorCopy = error === null ? null : getChallengeErrorCopy(error);
 
   return (
-    <div className="site-shell">
-      <div className="ambient-shader" aria-hidden="true" />
-      <header className="site-header">
-        <Link className="brand-lockup" href="/">
-          <span className="brand-name">
-            <span>FillTheLyrics</span>
-            <span>Results</span>
-          </span>
-        </Link>
-        <Link className="header-pill no-underline" href={challenge?.source.kind === "public-playlist" ? "/" : "/albums"}>
-          {challenge?.source.kind === "public-playlist" ? "Import" : "Library"}
-        </Link>
-      </header>
-      <main
-        className="challenge-results-main mx-auto w-full max-w-[920px] min-w-0 flex-1 py-[clamp(4rem,9vw,7rem)]"
-      >
-        {challenge ? (
-          <ResultsContent challenge={challenge} />
-        ) : errorCopy ? (
-          <section role="alert" className="glass-panel rounded-[1.5rem] p-7">
-            <h1 className="text-3xl font-semibold text-[var(--foreground)]">{errorCopy.heading}</h1>
-            <p className="mt-3 text-[var(--muted-strong)]">{errorCopy.detail}</p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <button className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-bold text-[var(--accent-ink)]" type="button" onClick={() => setReloadKey((key) => key + 1)}>Try again</button>
-              {errorCopy.reconnect && (
-                <a className="rounded-full border border-[rgba(124,245,188,0.42)] px-5 py-3 text-sm font-semibold text-[var(--accent)] no-underline" href="/api/auth/spotify">Reconnect Spotify</a>
-              )}
-              <Link className="rounded-full border border-[var(--border-strong)] px-5 py-3 text-sm font-semibold text-[var(--foreground)] no-underline" href="/albums">Back to library</Link>
-            </div>
-          </section>
-        ) : (
-          <p role="status" aria-live="polite" className="text-[var(--muted-strong)]">Loading results…</p>
-        )}
-      </main>
-    </div>
+    <StageAtmosphere
+      intensity="solved"
+      className="ftl-results-stage-shell"
+    >
+      <div className="ftl-results-page">
+        <header className="ftl-results-header" aria-label="Results navigation">
+          <BrandWordmark
+            href="/"
+            ariaLabel="FillTheLyrics home"
+            subtitle="Final results"
+          />
+          <Link
+            className="ftl-results-header__source"
+            href={challenge?.source.kind === "public-playlist" ? "/" : "/albums"}
+          >
+            {challenge?.source.kind === "public-playlist" ? "Import" : "Library"}
+          </Link>
+        </header>
+        <main
+          className="ftl-results-main"
+          aria-labelledby="challenge-results-heading"
+        >
+          {challenge ? (
+            <ResultsContent challenge={challenge} />
+          ) : errorCopy ? (
+            <section role="alert" className="ftl-results-error">
+              <h1>{errorCopy.heading}</h1>
+              <p>{errorCopy.detail}</p>
+              <div className="ftl-results-error__actions">
+                <button
+                  className="ftl-results-action ftl-results-action--primary"
+                  type="button"
+                  onClick={() => setReloadKey((key) => key + 1)}
+                >
+                  Try again
+                </button>
+                {errorCopy.reconnect && (
+                  <a
+                    className="ftl-results-action ftl-results-action--secondary"
+                    href="/api/auth/spotify"
+                  >
+                    Reconnect Spotify
+                  </a>
+                )}
+                <Link
+                  className="ftl-results-action ftl-results-action--secondary"
+                  href="/albums"
+                >
+                  Back to library
+                </Link>
+              </div>
+            </section>
+          ) : (
+            <p role="status" aria-live="polite" className="ftl-results-loading">
+              Loading results…
+            </p>
+          )}
+        </main>
+      </div>
+    </StageAtmosphere>
   );
 }

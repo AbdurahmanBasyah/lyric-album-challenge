@@ -1,16 +1,28 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import {
+    Bebas_Neue,
+    Instrument_Sans,
+    Kalam,
+} from "next/font/google";
 import { MotionProvider } from "@/components/ui/motion-provider";
 import "./globals.css";
 
-const geistSans = Geist({
-    variable: "--font-geist-sans",
+const displayFont = Bebas_Neue({
+    variable: "--font-ftl-display",
     subsets: ["latin"],
+    weight: "400",
 });
 
-const geistMono = Geist_Mono({
-    variable: "--font-geist-mono",
+const uiFont = Instrument_Sans({
+    variable: "--font-ftl-ui",
     subsets: ["latin"],
+    weight: ["400", "500", "600", "700"],
+});
+
+const handwritingFont = Kalam({
+    variable: "--font-ftl-handwriting",
+    subsets: ["latin"],
+    weight: "400",
 });
 
 export const metadata: Metadata = {
@@ -22,7 +34,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     return (
         <html
             lang="en"
-            className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+            className={`${displayFont.variable} ${uiFont.variable} ${handwritingFont.variable} h-full antialiased`}
         >
             <body className="min-h-full flex flex-col bg-background font-sans text-foreground">
                 <MotionProvider>{children}</MotionProvider>

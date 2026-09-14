@@ -22,7 +22,6 @@ const INVALID_URL_MESSAGE =
 export function PublicPlaylistForm() {
   const router = useRouter();
   const prefersReducedMotion = useReducedMotion();
-  const reducedMotion = prefersReducedMotion ?? false;
   const inputRef = useRef<HTMLInputElement | null>(null);
   const submittingRef = useRef(false);
   const [value, setValue] = useState("");
@@ -45,9 +44,8 @@ export function PublicPlaylistForm() {
       return;
     }
 
-    // Canonicalization guarantees that the final path segment is a validated
-    // Spotify playlist ID. The provider is not contacted until the player
-    // confirms this source on the setup screen.
+    // The landing page only validates/canonicalizes the source. Provider work
+    // begins in ChallengeIntro after the navigation completes.
     const spotifyId = canonicalUrl.slice(canonicalUrl.lastIndexOf("/") + 1);
     const source: ChallengeSourceContext = {
       kind: "public-playlist",
@@ -57,14 +55,13 @@ export function PublicPlaylistForm() {
 
     setValue(canonicalUrl);
     setPhase("navigating");
-    setStatusMessage("Opening challenge setup...");
+    setStatusMessage("Opening challenge setup…");
     submittingRef.current = true;
 
     try {
       router.replace(createChallengeIntroUrl(source));
     } catch {
-      // The source is locally validated, but a navigation failure is still a
-      // recoverable UI state rather than a provider or implementation error.
+      // A navigation failure is recoverable and is not a provider error.
       setPhase("idle");
       setStatusMessage("We couldn't open setup. Please try again.");
     } finally {
@@ -73,31 +70,29 @@ export function PublicPlaylistForm() {
   };
 
   const hasError = phase === "invalid";
-  const buttonLabel =
-    phase === "navigating" ? "Opening setup..." : "Import playlist";
+  const isNavigating = phase === "navigating";
+  const buttonLabel = isNavigating ? "Opening setup…" : "Play this playlist";
 
   return (
     <motion.div
-      className="import-form-wrap"
-      initial={{ opacity: 1, y: reducedMotion ? 0 : 10 }}
+      className="ftl-import-form-wrap import-form-wrap"
+      initial={{ opacity: 1, y: prefersReducedMotion ? 0 : 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: reducedMotion ? 0 : 0.32, ease: "easeOut" }}
+      transition={{ duration: prefersReducedMotion ? 0 : 0.32, ease: "easeOut" }}
     >
       <form
-        className="hero-actions playlist-form"
+        id="public-playlist-form"
+        className="ftl-import-form playlist-form"
         onSubmit={submit}
-        aria-busy={phase === "navigating"}
+        aria-busy={isNavigating}
       >
-        <label
-          className="playlist-label"
-          htmlFor={PUBLIC_PLAYLIST_URL_INPUT_ID}
-        >
+        <label className="ftl-import-label playlist-label" htmlFor={PUBLIC_PLAYLIST_URL_INPUT_ID}>
           Public Spotify playlist link
         </label>
-        <div className="playlist-input-row">
+        <div className="ftl-import-input-row playlist-input-row">
           <input
             ref={inputRef}
-            className="playlist-input"
+            className="ftl-import-input playlist-input"
             id={PUBLIC_PLAYLIST_URL_INPUT_ID}
             name="playlist-url"
             type="url"
@@ -126,7 +121,7 @@ export function PublicPlaylistForm() {
             }}
             onChange={(event) => {
               setValue(event.target.value);
-              if (phase !== "navigating") {
+              if (!isNavigating) {
                 setPhase("idle");
                 setStatusMessage("");
               }
@@ -134,39 +129,39 @@ export function PublicPlaylistForm() {
             aria-invalid={hasError}
             aria-describedby={`${PUBLIC_PLAYLIST_URL_INPUT_ID}-help ${PUBLIC_PLAYLIST_STATUS_ID}`}
             aria-errormessage={hasError ? PUBLIC_PLAYLIST_STATUS_ID : undefined}
-            disabled={phase === "navigating"}
+            disabled={isNavigating}
           />
           <button
-            className="playlist-submit"
+            className="ftl-import-submit playlist-submit"
             type="submit"
-            disabled={phase === "navigating"}
-            aria-busy={phase === "navigating"}
+            disabled={isNavigating}
+            aria-busy={isNavigating}
           >
             {buttonLabel}
+            <span aria-hidden="true" className="ftl-import-submit__arrow">
+              →
+            </span>
           </button>
         </div>
-        <p
-          id={`${PUBLIC_PLAYLIST_URL_INPUT_ID}-help`}
-          className="cta-status text-left"
-        >
-          Public playlist URL only · no sign-in needed.
+        <p id={`${PUBLIC_PLAYLIST_URL_INPUT_ID}-help`} className="ftl-import-help cta-status">
+          Canonical open.spotify.com playlist links only.
         </p>
       </form>
 
       <div
         id={PUBLIC_PLAYLIST_STATUS_ID}
-        className="form-feedback"
+        className="ftl-import-feedback form-feedback"
         role="status"
         aria-live="polite"
         aria-atomic="true"
       >
         {phase === "invalid" && (
-          <p className="form-error" role="alert">
+          <p className="ftl-import-error form-error" role="alert">
             {INVALID_URL_MESSAGE}
           </p>
         )}
         {statusMessage && phase !== "invalid" && (
-          <p className="form-status">{statusMessage}</p>
+          <p className="ftl-import-status form-status">{statusMessage}</p>
         )}
       </div>
     </motion.div>

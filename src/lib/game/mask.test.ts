@@ -11,6 +11,7 @@ import type {
 import { tokenizeLyricWindow } from "./tokenize";
 import {
   applyRevealForAttempt,
+  COMMON_WORD_ANCHORS,
   DEFAULT_REVEAL_CONFIG,
   getRevealTargetCount,
 } from "./mask";
@@ -61,9 +62,15 @@ function freezeWindow(window: TokenizedLyricWindow): TokenizedLyricWindow {
 }
 
 describe("getRevealTargetCount", () => {
-  it("uses the approved cumulative visible targets", () => {
-    expect(getRevealTargetCount(20, 1)).toBe(6);
-    expect(getRevealTargetCount(20, 2)).toBe(10);
+  it("uses the corrective cumulative visible targets", () => {
+    expect(DEFAULT_REVEAL_CONFIG).toEqual({
+      1: 0.4,
+      2: 0.55,
+      3: 0.7,
+      4: 0.8,
+    });
+    expect(getRevealTargetCount(20, 1)).toBe(8);
+    expect(getRevealTargetCount(20, 2)).toBe(11);
     expect(getRevealTargetCount(20, 3)).toBe(14);
     expect(getRevealTargetCount(20, 4)).toBe(16);
   });
@@ -76,7 +83,7 @@ describe("getRevealTargetCount", () => {
     [13, 4, 10],
     [17, 4, 14],
   ])("rounds the cumulative ratio for %i words at attempt %i to %i visible words", (wordCount, attempt, expected) => {
-    const ratio = ({ 1: 0.3, 2: 0.5, 3: 0.7, 4: 0.8 } as const)[attempt as 1 | 2 | 3 | 4];
+    const ratio = ({ 1: 0.4, 2: 0.55, 3: 0.7, 4: 0.8 } as const)[attempt as 1 | 2 | 3 | 4];
 
     expect(getRevealTargetCount(wordCount, attempt as AttemptNumber)).toBe(
       Math.round(wordCount * ratio),
@@ -139,12 +146,12 @@ describe("getRevealTargetCount", () => {
 
   it("keeps the default configuration immutable", () => {
     expect(Object.isFrozen(DEFAULT_REVEAL_CONFIG)).toBe(true);
-    expect(DEFAULT_REVEAL_CONFIG).toEqual({ 1: 0.3, 2: 0.5, 3: 0.7, 4: 0.8 });
+    expect(DEFAULT_REVEAL_CONFIG).toEqual({ 1: 0.4, 2: 0.55, 3: 0.7, 4: 0.8 });
   });
 });
 
 describe("applyRevealForAttempt", () => {
-  it("reveals exactly six of twenty words on the expert attempt", () => {
+  it("reveals exactly eight of twenty words on the expert attempt", () => {
     const window = makeWindow([
       "signal keeps the rhythm moving",
       "silver windows carry distant echoes",
@@ -154,11 +161,11 @@ describe("applyRevealForAttempt", () => {
 
     const result = applyRevealForAttempt(window, 1, "attempt-one");
 
-    expect(revealedWords(result)).toHaveLength(6);
-    expect(wordTokens(result).filter((token) => token.state === "hidden")).toHaveLength(14);
+    expect(revealedWords(result)).toHaveLength(8);
+    expect(wordTokens(result).filter((token) => token.state === "hidden")).toHaveLength(12);
   });
 
-  it("prioritizes common anchor words before content words", () => {
+  it("prioritizes seeded meaningful anchors across eligible semantic lines", () => {
     const window = makeWindow([
       "the comet crosses in silence",
       "we carry a quiet signal",
@@ -167,10 +174,63 @@ describe("applyRevealForAttempt", () => {
     ]);
 
     const result = applyRevealForAttempt(window, 1, "anchor-seed");
-    const revealed = revealedWords(result).map((token) => token.normalized);
+    const revealedByLine = result.map((line) =>
+      line.tokens.filter((token) => token.state === "revealed"),
+    );
 
-    expect(revealed).toHaveLength(6);
-    expect(revealed.slice(0, 4).every((word) => ["the", "in", "we", "a"].includes(word))).toBe(true);
+    expect(revealedWords(result)).toHaveLength(8);
+    for (const line of revealedByLine) {
+      expect(
+        line.some((token) => token.isWord && !COMMON_WORD_ANCHORS.has(token.normalized)),
+      ).toBe(true);
+    }
+  });
+
+  it("matches the 44-word fairness targets and nominal hidden counts", () => {
+    const window = makeWindow([
+      "violet lanterns trace a silver skyline above the quiet river tonight",
+      "paper windows carry distant signals through our midnight garden after rain",
+      "engines hum beneath electric clouds while we remember old promises softly",
+      "silver footsteps cross the station and distant echoes return before sunrise",
+    ]);
+    const expected = [
+      [1, 18, 26],
+      [2, 24, 20],
+      [3, 31, 13],
+      [4, 35, 9],
+    ] as const;
+
+    for (const [attempt, visible, hidden] of expected) {
+      const result = applyRevealForAttempt(window, attempt, "fairness-seed");
+      expect(revealedWords(result)).toHaveLength(visible);
+      expect(wordTokens(result).filter((token) => token.state === "hidden")).toHaveLength(hidden);
+    }
+  });
+
+  it("reveals at least one meaningful anchor per eligible line and no more than two", () => {
+    const window = makeWindow([
+      "violet lanterns trace a silver skyline above the quiet river tonight",
+      "paper windows carry distant signals through our midnight garden after rain",
+      "engines hum beneath electric clouds while we remember old promises softly",
+      "silver footsteps cross the station and distant echoes return before sunrise",
+    ]);
+    const result = applyRevealForAttempt(window, 1, "anchor-floor-seed", {
+      1: 8 / 44,
+      2: 8 / 44,
+      3: 8 / 44,
+      4: 8 / 44,
+    });
+
+    for (const line of result) {
+      const meaningfulAnchors = line.tokens.filter(
+        (token) =>
+          token.state === "revealed" &&
+          token.isWord &&
+          !COMMON_WORD_ANCHORS.has(token.normalized),
+      );
+      expect(meaningfulAnchors.length).toBeGreaterThanOrEqual(1);
+      expect(meaningfulAnchors.length).toBeLessThanOrEqual(2);
+    }
   });
 
   it("progresses cumulatively through all four attempts", () => {
@@ -186,8 +246,8 @@ describe("applyRevealForAttempt", () => {
     const attempt3 = applyRevealForAttempt(attempt2, 3, "progress-seed");
     const attempt4 = applyRevealForAttempt(attempt3, 4, "progress-seed");
 
-    expect(revealedWords(attempt1)).toHaveLength(6);
-    expect(revealedWords(attempt2)).toHaveLength(10);
+    expect(revealedWords(attempt1)).toHaveLength(8);
+    expect(revealedWords(attempt2)).toHaveLength(11);
     expect(revealedWords(attempt3)).toHaveLength(14);
     expect(revealedWords(attempt4)).toHaveLength(16);
     expect(wordTokens(attempt4).filter((token) => token.state === "hidden")).toHaveLength(4);

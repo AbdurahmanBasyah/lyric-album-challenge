@@ -31,6 +31,10 @@ import {
   createYouTubeResolver,
   type YouTubeResolverOptions,
 } from "../../../../../../../lib/youtube/youtube-resolver";
+import {
+  youtubeWarmupCache,
+  type YouTubeWarmupCache,
+} from "../../../../../../../lib/playback/youtube-warmup";
 import type { ChallengeApiErrorCode } from "../../../../../../../types/challenge";
 
 export const runtime = "nodejs";
@@ -64,9 +68,11 @@ type AuthenticatedRequest = Readonly<{
   refreshed: boolean;
 }>;
 
-type PlaybackRouteDependencies = Readonly<{
+export type PlaybackRouteDependencies = Readonly<{
   /** Test/server seam; production uses the accepted resolver factory. */
   resolver?: ChallengePlaybackResolver;
+  /** Shared challenge/question warmup seam; production uses the process cache. */
+  warmup?: YouTubeWarmupCache;
   createResolver?: (
     options?: YouTubeResolverOptions,
   ) => ChallengePlaybackResolver;
@@ -89,7 +95,7 @@ class PlaybackRequestError extends Error {
   }
 }
 
-function createErrorResponse(error: ChallengeApiErrorCode): NextResponse {
+export function createErrorResponse(error: ChallengeApiErrorCode): NextResponse {
   return NextResponse.json(
     { error },
     {
@@ -113,7 +119,7 @@ function authRequiredResponse(secure: boolean): NextResponse {
   return response;
 }
 
-function applySessionRefresh(
+export function applySessionRefresh(
   response: NextResponse,
   authentication: AuthenticatedRequest,
 ): NextResponse {
@@ -136,7 +142,7 @@ function applySessionRefresh(
  * does not touch cookies or the OAuth environment. A non-public challenge is
  * intentionally returned as null so the legacy session gate remains intact.
  */
-function readAnonymousPublicChallenge(challengeId: string) {
+export function readAnonymousPublicChallenge(challengeId: string) {
   try {
     const challenge = challengeStore.get(challengeId);
     return challenge.source.kind === "public-playlist" ? challenge : null;
@@ -145,7 +151,7 @@ function readAnonymousPublicChallenge(challengeId: string) {
   }
 }
 
-async function readAuthentication(
+export async function readAuthentication(
   dependencies: PlaybackRouteDependencies,
 ): Promise<AuthenticatedRequest | NextResponse> {
   let cookieStore;
@@ -221,7 +227,7 @@ function validateContentLength(request: Request): void {
 }
 
 /** Empty bytes and the strictly empty JSON object are the only valid bodies. */
-async function validatePlaybackBody(request: Request): Promise<void> {
+export async function validatePlaybackBody(request: Request): Promise<void> {
   validateContentLength(request);
 
   let text: string;
@@ -260,7 +266,7 @@ async function validatePlaybackBody(request: Request): Promise<void> {
   }
 }
 
-function readRouteParams(value: unknown): PlaybackRouteParams | null {
+export function readRouteParams(value: unknown): PlaybackRouteParams | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return null;
   }
@@ -282,7 +288,7 @@ function readRouteParams(value: unknown): PlaybackRouteParams | null {
   });
 }
 
-function readQuestion(
+export function readQuestion(
   params: PlaybackRouteParams,
 ): Readonly<{
   challenge: ReturnType<typeof challengeStore.get>;
@@ -310,7 +316,7 @@ function readQuestion(
   }
 }
 
-function createResolver(
+export function createResolver(
   dependencies: PlaybackRouteDependencies,
   apiKey: unknown,
 ): ChallengePlaybackResolver {
@@ -354,10 +360,19 @@ async function handleTerminalPlayback(
 
   try {
     const resolver = createResolver(dependencies, apiKey);
+    const warmup = dependencies.warmup ?? youtubeWarmupCache;
     // The playback helper derives the optional startAtMs from this
     // server-owned terminal window. No request field can override it, and no
     // end boundary is fabricated when the lyric window has none.
-    payload = await resolveChallengeQuestionPlayback(found.question, resolver);
+    payload = await resolveChallengeQuestionPlayback(found.question, {
+      resolveTrack: () =>
+        warmup.resolve(
+          params.challengeId,
+          params.questionId,
+          found.challenge.expiresAt,
+          () => resolver.resolveTrack(found.question.track),
+        ),
+    });
   } catch {
     // Resolver construction is optional provider work. Keep provider failures
     // from becoming route failures or leaking constructor diagnostics.

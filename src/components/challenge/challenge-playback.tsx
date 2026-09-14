@@ -42,11 +42,11 @@ export const PLAYBACK_UNAVAILABLE_REASONS: readonly ChallengePlaybackUnavailable
 
 const STATUS_COPY: Readonly<Record<PlaybackStatus, PlaybackStatusCopy>> = {
   idle: {
-    label: "Optional listening",
-    detail: "A visible YouTube player will load automatically after the reveal.",
+    label: "Preparing the moment",
+    detail: "The optional player will appear here after the reveal.",
   },
   loading: {
-    label: "Loading YouTube playback",
+    label: "Preparing YouTube playback",
     detail: "The player will appear here when it is ready.",
   },
   available: {
@@ -519,47 +519,58 @@ export function ChallengePlayback({
 
   return (
     <motion.section
-      className="mt-6 rounded-[1.25rem] border border-[var(--border)] bg-[rgba(13,25,29,0.62)] p-4 sm:p-5"
+      className="ftl-playback-panel"
       initial={{ opacity: 0, y: reducedMotion ? 0 : 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }}
       aria-labelledby="challenge-playback-heading"
     >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
-            Optional listening
+      <div className="ftl-playback-panel__header">
+        <div className="ftl-playback-panel__copy">
+          <p className="ftl-playback-panel__eyebrow">
+            Hear the moment
           </p>
           <h3
             id="challenge-playback-heading"
-            className="mt-2 text-base font-semibold text-[var(--foreground)]"
+            className="ftl-playback-panel__heading"
           >
-            Hear the revealed fragment on YouTube
+            Listen after the reveal
           </h3>
-          <p className="mt-1 text-sm leading-6 text-[var(--muted-strong)]">
+          <p className="ftl-playback-panel__detail">
             {reveal.trackName} · The challenge is complete without listening.
           </p>
         </div>
 
+        {(status === "unavailable" || status === "error") && (
         <button
-          className="inline-flex min-h-11 flex-none items-center justify-center rounded-full border border-[var(--border-strong)] px-5 text-sm font-semibold text-[var(--foreground)] transition-transform hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-65"
+          className="ftl-playback-panel__retry"
           type="button"
           disabled={isPending}
           aria-busy={isPending}
-          aria-label={`${status === "available" || status === "manual" ? "Reload" : "Retry"} optional YouTube playback for ${reveal.trackName}`}
+          aria-label="Retry optional YouTube playback"
           onClick={handlePlaybackRequest}
         >
           {isPending
             ? "Loading YouTube player…"
-            : status === "available" || status === "manual"
-              ? "Reload YouTube player"
-              : "Try YouTube playback again"}
+             : "Try again"}
         </button>
+        )}
       </div>
+
+      {status === "loading" && (
+        <div
+          className="ftl-playback-skeleton"
+          role="status"
+          aria-label="Loading optional YouTube playback"
+          aria-busy="true"
+        >
+          <span aria-hidden="true" />
+        </div>
+      )}
 
       {playerState !== null && (
         <motion.div
-          className="mt-5 w-full min-w-[200px] max-w-3xl overflow-x-auto rounded-xl border border-[var(--border-strong)] bg-black p-1"
+          className="ftl-playback-frame"
           initial={{ opacity: 0, y: reducedMotion ? 0 : 5 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: reducedMotion ? 0 : 0.18, ease: "easeOut" }}
@@ -588,7 +599,7 @@ export function ChallengePlayback({
 
       <motion.p
         key={`${status}-${status === "unavailable" ? stateForReveal.reason : ""}`}
-        className="mt-4 flex items-start gap-2 border-t border-[var(--border)] pt-3 text-sm leading-6 text-[var(--muted-strong)]"
+        className="ftl-playback-panel__status"
         initial={{ opacity: 0, y: reducedMotion ? 0 : 4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: reducedMotion ? 0 : 0.16, ease: "easeOut" }}
@@ -596,6 +607,7 @@ export function ChallengePlayback({
         aria-live="polite"
         aria-atomic="true"
         data-playback-status={status}
+        data-playback-state={status}
       >
         <span
           className="mt-1 inline-flex h-5 w-5 flex-none items-center justify-center rounded-full border border-[var(--border-strong)] text-xs font-bold text-[var(--accent)]"

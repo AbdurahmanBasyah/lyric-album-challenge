@@ -1,6 +1,7 @@
 import type {
   ChallengeApiErrorCode,
   ChallengePlaybackResponse,
+  ChallengePlaybackWarmupResponse,
   ChallengePlaybackUnavailableReason,
   ChallengePlaybackView,
   ChallengeGuessContinueView,
@@ -829,6 +830,39 @@ export function parseChallengePlaybackResponse(
 /** Alias kept for callers that name the parsed value rather than its envelope. */
 export const parseChallengePlayback = parseChallengePlaybackResponse;
 
+/**
+ * Parse the deliberately narrow active-question warmup acknowledgement. Any
+ * provider metadata is rejected rather than tolerated at the browser seam.
+ */
+export function parseChallengePlaybackWarmupResponse(
+  value: unknown,
+): ChallengePlaybackWarmupResponse | null {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["warmup"])) {
+    return null;
+  }
+
+  const warmup = value.warmup;
+
+  if (
+    !isRecord(warmup) ||
+    !hasOnlyKeys(warmup, ["provider", "status"]) ||
+    warmup.provider !== "youtube" ||
+    warmup.status !== "accepted"
+  ) {
+    return null;
+  }
+
+  return Object.freeze({
+    warmup: Object.freeze({
+      provider: "youtube" as const,
+      status: "accepted" as const,
+    }),
+  });
+}
+
+export const parseChallengePlaybackWarmup =
+  parseChallengePlaybackWarmupResponse;
+
 async function readPayload(response: Response): Promise<unknown> {
   try {
     return await response.json();
@@ -1218,6 +1252,37 @@ export async function requestChallengePlayback(
 
 /** Explicit alias for components that call this action a playback fetch. */
 export const fetchChallengePlayback = requestChallengePlayback;
+
+/**
+ * Start server-side playback resolution for an active question. The browser
+ * sends only opaque handles and an empty JSON object; the acknowledgement has
+ * no candidate, title, artist, or provider URL.
+ */
+export async function requestChallengePlaybackWarmup(
+  challengeId: string,
+  questionId: string,
+  options: ChallengeClientOptions = {},
+): Promise<ChallengePlaybackWarmupResponse["warmup"]> {
+  if (!isOpaqueId(challengeId) || !isOpaqueId(questionId)) {
+    throw new ChallengeClientError("CHALLENGE_NOT_FOUND", 404);
+  }
+
+  const payload = await requestPayload(
+    `/api/challenges/${encodeURIComponent(challengeId)}/questions/${encodeURIComponent(questionId)}/playback/warmup`,
+    { method: "POST", body: "{}" },
+    options,
+  );
+  const response = parseChallengePlaybackWarmupResponse(payload);
+
+  if (response === null) {
+    throw new ChallengeClientError("INVALID_RESPONSE");
+  }
+
+  return response.warmup;
+}
+
+/** Explicit alias for the one-per-active-question warmup action. */
+export const warmupChallengePlayback = requestChallengePlaybackWarmup;
 
 export function saveRecoveryPointer(
   storage: StorageLike,

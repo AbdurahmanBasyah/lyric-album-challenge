@@ -1,14 +1,21 @@
 import type { MatchResult } from "@/types/game";
 
-const CURLY_APOSTROPHE_PATTERN = /[\u2018\u2019]/g;
+/**
+ * Apostrophe glyphs accepted as formatting variants at the answer boundary.
+ * NFKC already folds the fullwidth form, but keeping it here makes the
+ * accepted set explicit and covers modifier/quotation glyphs used by lyric
+ * sources and mobile keyboards.
+ */
+const APOSTROPHE_VARIANTS_PATTERN = /['\u2018\u2019\u201a\u201b\u02b9\u02bc\u275b\u275c\uff07]/gu;
 const REPEATED_WHITESPACE_PATTERN = /\s+/g;
 
 /**
  * Normalizes one player answer for exact, positional lyric matching.
  *
- * This intentionally keeps meaningful punctuation and diacritics intact. It
- * only applies the canonicalization shared by the lyric tokenizer and the
- * answer input boundary; fuzzy matching belongs behind this seam later.
+ * This intentionally keeps meaningful punctuation and diacritics intact. The
+ * only punctuation variance accepted by gameplay is apostrophe formatting:
+ * apostrophes are optional, so `dont`, `don't`, and curly/modifier variants
+ * compare equally. Fuzzy matching belongs behind this seam later.
  */
 export function normalizeAnswer(value: string): string {
   if (typeof value !== "string") {
@@ -18,7 +25,7 @@ export function normalizeAnswer(value: string): string {
   return value
     .normalize("NFKC")
     .toLowerCase()
-    .replace(CURLY_APOSTROPHE_PATTERN, "'")
+    .replace(APOSTROPHE_VARIANTS_PATTERN, "")
     .trim()
     .replace(REPEATED_WHITESPACE_PATTERN, " ");
 }

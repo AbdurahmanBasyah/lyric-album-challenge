@@ -8,20 +8,41 @@ const introSource = readFileSync(
 );
 
 describe("challenge setup flow", () => {
-  it("keeps public import behind the explicit setup action", () => {
-    expect(introSource).toContain("createPublicPlaylistChallenge");
-    expect(introSource).toContain("source.canonicalUrl");
-    expect(introSource).toContain("router.replace(`/play/${encodeURIComponent(challenge.id)}`)");
-    expect(introSource).toContain("Imported playlist");
-    expect(introSource).toContain("Start challenge");
-    expect(introSource).not.toContain("Import playlist");
-    expect(introSource).toContain("Building your challenge…");
+  it("automatically imports public playlists on setup entry", () => {
+    expect(introSource).toContain("createPublicPlaylistChallenge(canonicalUrl)");
+    expect(introSource).toContain("publicSourceUrl");
+    expect(introSource).toContain("beginPublicImport(publicSourceUrl)");
+    expect(introSource).toContain("queueMicrotask");
+    expect(introSource).toContain("publicImportRef");
+    expect(introSource).toContain("publicAttemptRef");
   });
 
-  it("preserves the legacy source creation branch", () => {
+  it("uses an explicit loading/ready/error union for public setup", () => {
+    expect(introSource).toContain("export type PublicPreStartState");
+    expect(introSource).toContain('phase: "loading"');
+    expect(introSource).toContain('phase: "ready"; challenge: ChallengeView');
+    expect(introSource).toContain('phase: "error"; error: unknown');
+    expect(introSource).toContain('publicState.phase === "ready"');
+    expect(introSource).toContain('publicState.phase === "error"');
+    expect(introSource).toContain("publicChallenge.questionCount");
+    expect(introSource).toContain("publicChallenge.source.displayName");
+  });
+
+  it("waits for explicit Start Challenge and never posts again on start", () => {
+    expect(introSource).toContain("const startPublicChallenge = () =>");
+    expect(introSource).toContain('publicState.phase !== "ready"');
+    expect(introSource).toContain("saveChallengeRecovery(publicState.challenge.id)");
+    expect(introSource).toContain(
+      "router.replace(`/play/${encodeURIComponent(publicState.challenge.id)}`)",
+    );
+    expect(introSource).toContain('"Start Challenge"');
+    expect(introSource).not.toContain("createPublicPlaylistChallenge(source.canonicalUrl");
+  });
+
+  it("preserves the authenticated legacy source creation branch", () => {
     expect(introSource).toContain("createChallenge(source");
     expect(introSource).toContain('source.kind === "public-playlist"');
-    expect(introSource).toContain('href={backHref}');
+    expect(introSource).toContain("href={backHref}");
   });
 
   it("exposes truthful, recoverable, accessible states", () => {
@@ -30,7 +51,7 @@ describe("challenge setup flow", () => {
     expect(introSource).toContain('role="alert"');
     expect(introSource).toContain("aria-busy={starting}");
     expect(introSource).toContain("Try again");
-    expect(introSource).not.toContain("percent");
+    expect(introSource).toContain("Choose another playlist");
     expect(introSource).not.toContain("track list");
   });
 });

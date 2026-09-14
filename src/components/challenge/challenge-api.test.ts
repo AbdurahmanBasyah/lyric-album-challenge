@@ -16,12 +16,14 @@ import {
   getChallenge,
   parseChallengeEnvelope,
   parseChallengePlaybackResponse,
+  parseChallengePlaybackWarmupResponse,
   parseChallengeSourceContext,
   parseGuessResponse,
   readRecoveryPointer,
   saveRecoveryPointer,
   submitChallengeGuess,
   requestChallengePlayback,
+  requestChallengePlaybackWarmup,
   getChallengeErrorCopy,
   type StorageLike,
 } from "./challenge-api";
@@ -603,6 +605,68 @@ describe("challenge browser boundary", () => {
     });
     expect(fetchMock.mock.calls[0][0]).toBe(
       `/api/challenges/${challengeId}/questions/${questionId}/playback`,
+    );
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      method: "POST",
+      body: "{}",
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    });
+  });
+
+  it("accepts only the metadata-free warmup acknowledgement", () => {
+    const accepted = {
+      warmup: { provider: "youtube", status: "accepted" },
+    };
+
+    expect(parseChallengePlaybackWarmupResponse(accepted)).toEqual(accepted);
+    expect(
+      parseChallengePlaybackWarmupResponse({
+        warmup: {
+          provider: "youtube",
+          status: "accepted",
+          videoId: "AbCdEfGhIjK",
+        },
+      }),
+    ).toBeNull();
+    expect(
+      parseChallengePlaybackWarmupResponse({
+        warmup: { provider: "youtube", status: "resolved" },
+      }),
+    ).toBeNull();
+    expect(
+      parseChallengePlaybackWarmupResponse({
+        warmup: { provider: "spotify", status: "accepted" },
+      }),
+    ).toBeNull();
+    expect(
+      parseChallengePlaybackWarmupResponse({ ...accepted, title: "private" }),
+    ).toBeNull();
+  });
+
+  it("requests warmup by opaque IDs with no client-selected playback data", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          warmup: { provider: "youtube", status: "accepted" },
+        }),
+        { status: 202 },
+      ),
+    );
+
+    const warmup = await requestChallengePlaybackWarmup(
+      challengeId,
+      questionId,
+      { fetch: fetchMock },
+    );
+
+    expect(warmup).toEqual({ provider: "youtube", status: "accepted" });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `/api/challenges/${challengeId}/questions/${questionId}/playback/warmup`,
     );
     expect(fetchMock.mock.calls[0][1]).toMatchObject({
       method: "POST",

@@ -7,6 +7,7 @@ import {
   buildCelebrationEvents,
   buildCelebrationQueue,
   MIN_STREAK_FOR_CELEBRATION,
+  phaseForCelebrationEvent,
 } from "./challenge-celebration";
 
 function finished(
@@ -39,6 +40,24 @@ describe("challenge celebration queue", () => {
     ]);
   });
 
+  it("allows baseline Expert visibility but never treats later attempts as Perfect", () => {
+    expect(
+      buildCelebrationQueue(
+        finished({
+          attemptsUsed: 1,
+          perfect: true,
+          progress: { solved: 4, revealed: 2, totalAnswerTokens: 8 },
+        }),
+      ),
+    ).toEqual([{ kind: "perfect", questionId: "question_12345678" }]);
+
+    expect(
+      buildCelebrationQueue(
+        finished({ attemptsUsed: 2, perfect: true, streak: 1 }),
+      ),
+    ).toEqual([]);
+  });
+
   it("enqueues a streak only once the threshold is reached", () => {
     expect(MIN_STREAK_FOR_CELEBRATION).toBe(2);
     expect(buildCelebrationQueue(finished({ perfect: false, streak: 1 }))).toEqual([]);
@@ -52,6 +71,23 @@ describe("challenge celebration queue", () => {
       { kind: "perfect", questionId: "question_12345678" },
       { kind: "streak", questionId: "question_12345678", streak: 4 },
     ]);
+  });
+
+  it("maps the queue to one explicit, non-overlapping presentation phase", () => {
+    expect(phaseForCelebrationEvent(undefined)).toBe("round-complete");
+    expect(
+      phaseForCelebrationEvent({
+        kind: "perfect",
+        questionId: "question_12345678",
+      }),
+    ).toBe("celebrating-perfect");
+    expect(
+      phaseForCelebrationEvent({
+        kind: "streak",
+        questionId: "question_12345678",
+        streak: 3,
+      }),
+    ).toBe("celebrating-streak");
   });
 
   it("does not celebrate failed answers", () => {
@@ -80,6 +116,11 @@ describe("challenge celebration queue", () => {
     expect(source).toContain('role="status"');
     expect(source).toContain("useReducedMotion");
     expect(source).toContain("window.setTimeout");
+    expect(source).toContain("Perfect. Solved on Expert.");
+    expect(source).toContain("Streak:");
+    expect(source).toContain("reducedMotionOverride");
+    expect(source).toContain("FTL_MOTION");
+    expect(source).not.toContain("progress.revealed === 0");
     expect(source).not.toContain('role="dialog"');
     expect(source).not.toContain("aria-modal");
     expect(source).not.toContain("multiplier");

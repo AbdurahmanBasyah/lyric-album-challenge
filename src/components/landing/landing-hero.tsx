@@ -2,6 +2,9 @@
 
 import { motion } from "motion/react";
 
+import { BrandWordmark } from "@/components/fillthelyrics/visual/brand-wordmark";
+import { HandwrittenAnnotation } from "@/components/fillthelyrics/visual/handwritten-annotation";
+import { StageAtmosphere } from "@/components/fillthelyrics/visual/stage-atmosphere";
 import { PuzzlePreview } from "@/components/landing/puzzle-preview";
 import { PublicPlaylistForm } from "@/components/public-playlist/public-playlist-form";
 
@@ -22,123 +25,115 @@ const contentVariants = {
   },
 };
 
+const ruleItems = [
+  { value: "4", label: "lyric lines" },
+  { value: "4", label: "attempts" },
+  { value: "up to 5", label: "songs" },
+  { value: "Perfect", label: "on Expert" },
+  { value: "Build", label: "your streak" },
+] as const;
+
 export function LandingHero() {
   return (
-    <div className="site-shell landing-shell">
-      <div className="ambient-shader" aria-hidden="true" />
-
-      <motion.header
-        className="site-header"
-        initial="hidden"
-        animate="visible"
-        variants={contentVariants}
-      >
-        <motion.a
-          className="brand-lockup"
-          href="#main-content"
-          variants={entranceVariants}
+    <StageAtmosphere intensity="landing" className="ftl-landing-stage">
+      <div className="ftl-landing-page">
+        <motion.header
+          className="ftl-landing-header"
+          initial="hidden"
+          animate="visible"
+          variants={contentVariants}
         >
-          <span className="brand-mark" aria-hidden="true">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-            >
-              <path
-                d="M5 15.5V8.5M9.5 18V6M14 15.5V8.5M18.5 13V11"
-                strokeLinecap="round"
-              />
-            </svg>
-          </span>
-          <span className="brand-name">
-            <span>FillTheLyrics</span>
-            <span>Music memory, one word at a time</span>
-          </span>
-        </motion.a>
-        <motion.span className="header-pill" variants={entranceVariants}>
-          Public playlist mode
-        </motion.span>
-      </motion.header>
-
-      <main id="main-content" className="landing-main">
-        <div className="hero-grid">
-          <motion.section
-            className="hero-copy"
-            aria-labelledby="hero-title"
-            initial="hidden"
-            animate="visible"
-            variants={contentVariants}
+          <motion.div variants={entranceVariants}>
+            <BrandWordmark href="/" />
+          </motion.div>
+          <motion.nav
+            className="ftl-landing-nav"
+            aria-label="Landing page navigation"
+            variants={entranceVariants}
           >
-            <motion.p className="eyebrow" variants={entranceVariants}>
-              <span className="eyebrow-line" aria-hidden="true" />
-              A challenge for close listeners
-            </motion.p>
-            <motion.h1
-              id="hero-title"
-              className="hero-heading"
-              variants={entranceVariants}
-            >
-              How well do you know <span>the music you love?</span>
-            </motion.h1>
-            <motion.p className="hero-description" variants={entranceVariants}>
-              Paste a public Spotify playlist, then rebuild four-line lyric
-              fragments one word at a time. No account needed.
-            </motion.p>
+            <a className="ftl-landing-nav__active" href="#playlist-import">
+              Play
+            </a>
+            <a href="#how-it-works">About</a>
+          </motion.nav>
+        </motion.header>
 
-            <motion.div variants={entranceVariants}>
-              <PublicPlaylistForm />
-            </motion.div>
-
-            <motion.div
-              className="privacy-note"
-              role="note"
-              variants={entranceVariants}
+        <main id="main-content" className="ftl-landing-main">
+          <div className="ftl-landing-hero-grid">
+            <motion.section
+              className="ftl-landing-copy"
+              aria-labelledby="hero-title"
+              initial="hidden"
+              animate="visible"
+              variants={contentVariants}
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                aria-hidden="true"
+              <motion.p className="ftl-eyebrow" variants={entranceVariants}>
+                <span className="ftl-eyebrow__line" aria-hidden="true" />
+                A challenge for close listeners
+              </motion.p>
+              <motion.h1
+                id="hero-title"
+                className="ftl-landing-heading"
+                variants={entranceVariants}
               >
-                <rect x="5" y="10" width="14" height="10" rx="2" />
-                <path
-                  d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"
-                  strokeLinecap="round"
-                />
-              </svg>
-              <p>
-                <strong>Private by design.</strong> We only use the public
-                playlist link to prepare your challenge.
-              </p>
-            </motion.div>
+                How well
+                <br />
+                do you know
+                <br />
+                <span className="ftl-landing-heading__purple">the songs</span>
+                <br />
+                <span className="ftl-landing-heading__mint">you love?</span>
+              </motion.h1>
+              <motion.p
+                className="ftl-landing-description"
+                variants={entranceVariants}
+              >
+                Paste a public Spotify playlist. Rebuild four-line lyric
+                fragments one word at a time.
+              </motion.p>
 
-            <motion.ul
-              className="challenge-stats"
-              aria-label="Challenge details"
-              variants={entranceVariants}
-            >
-              <li>
-                <strong>4</strong> lyric lines
-              </li>
-              <li>
-                <strong>4</strong> attempts
-              </li>
-              <li>
-                <strong>5</strong> songs max
-              </li>
-            </motion.ul>
-          </motion.section>
+              <motion.div id="playlist-import" variants={entranceVariants}>
+                <PublicPlaylistForm />
+              </motion.div>
 
-          <PuzzlePreview />
-        </div>
-      </main>
+              <motion.p className="ftl-no-signin-note" variants={entranceVariants}>
+                <span className="ftl-no-signin-note__dot" aria-hidden="true" />
+                No Spotify sign-in required.
+              </motion.p>
+            </motion.section>
 
-      <footer className="landing-footer">
-        <p>Listen closely. Remember more.</p>
-        <p>Built for the playlist you already chose.</p>
-      </footer>
-    </div>
+            <PuzzlePreview />
+          </div>
+        </main>
+
+        <footer id="how-it-works" className="ftl-rule-strip">
+          <ul aria-label="Challenge rules">
+            {ruleItems.map((item) => (
+              <li key={item.label}>
+                <strong>{item.value}</strong>
+                <span>{item.label}</span>
+              </li>
+            ))}
+          </ul>
+        </footer>
+
+        <HandwrittenAnnotation
+          text="One word at a time"
+          tone="neutral"
+          size="sm"
+          rotateDeg={5}
+          underline="single"
+          className="ftl-landing-note ftl-landing-note--preview"
+        />
+        <HandwrittenAnnotation
+          text="Still a good song"
+          tone="mint"
+          size="sm"
+          rotateDeg={-4}
+          underline="double"
+          className="ftl-landing-note ftl-landing-note--bottom"
+        />
+      </div>
+    </StageAtmosphere>
   );
 }

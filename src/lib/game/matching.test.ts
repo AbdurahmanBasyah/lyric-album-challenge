@@ -3,20 +3,23 @@ import { describe, expect, it } from "vitest";
 import { compareToken, normalizeAnswer } from "./matching";
 
 describe("normalizeAnswer", () => {
-  it("normalizes case, NFKC compatibility characters, curly apostrophes, and whitespace", () => {
-    expect(normalizeAnswer("  ＷＥ’ＲＥ\tHERE  ")).toBe("we're here");
+  it("normalizes case, NFKC compatibility characters, apostrophes, and whitespace", () => {
+    expect(normalizeAnswer("  \uFF37\uFF25\u2019\uFF32\uFF25\tHERE  ")).toBe(
+      "were here",
+    );
   });
 
-  it("preserves meaningful internal punctuation and diacritics", () => {
-    expect(normalizeAnswer("  Rock'n'Röll!  ")).toBe("rock'n'röll!");
-    expect(normalizeAnswer("café")).toBe("café");
-  });
-
-  it("does not use fuzzy matching or remove punctuation", () => {
+  it("preserves hyphens, meaningful punctuation, and diacritics", () => {
+    expect(normalizeAnswer("  Rock'n'R\u00F6ll!  ")).toBe("rocknr\u00F6ll!");
+    expect(normalizeAnswer("caf\u00E9")).toBe("caf\u00E9");
     expect(normalizeAnswer("well-being")).toBe("well-being");
+    expect(compareToken("5\u2032", "5").matched).toBe(false);
+  });
+
+  it("does not use fuzzy matching or remove non-apostrophe punctuation", () => {
     expect(compareToken("ask", "asked").matched).toBe(false);
     expect(compareToken("rock'n'roll", "rock n roll").matched).toBe(false);
-    expect(compareToken("café", "cafe").matched).toBe(false);
+    expect(compareToken("caf\u00E9", "cafe").matched).toBe(false);
   });
 
   it("rejects non-string values explicitly", () => {
@@ -31,9 +34,19 @@ describe("normalizeAnswer", () => {
 });
 
 describe("compareToken", () => {
-  it("matches normalized exact answers case-insensitively", () => {
-    expect(compareToken("We're", "  we’re  ")).toEqual({ matched: true });
+  it("matches apostrophe-optional normalized answers case-insensitively", () => {
+    expect(compareToken("We're", "  we\u2019re  ")).toEqual({ matched: true });
+    expect(compareToken("don't", "dont")).toEqual({ matched: true });
+    expect(compareToken("I\u2019m", "im")).toEqual({ matched: true });
+    expect(compareToken("you\u2019re", "youre")).toEqual({ matched: true });
+    expect(compareToken("don\u02BCt", "DON'T")).toEqual({ matched: true });
     expect(compareToken("signal", "SIGNAL")).toEqual({ matched: true });
+  });
+
+  it("keeps hyphen, diacritic, and other meaningful punctuation differences strict", () => {
+    expect(compareToken("well-being", "wellbeing").matched).toBe(false);
+    expect(compareToken("caf\u00E9", "cafe").matched).toBe(false);
+    expect(compareToken("word!", "word").matched).toBe(false);
   });
 
   it("returns only a match fact and does not echo answer content", () => {

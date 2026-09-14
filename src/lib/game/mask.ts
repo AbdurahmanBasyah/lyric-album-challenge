@@ -11,12 +11,13 @@ import { seededShuffle } from "./seeded-random";
 const ATTEMPT_NUMBERS: readonly AttemptNumber[] = [1, 2, 3, 4];
 
 /**
- * The default ratios are cumulative visible-word targets. They are
- * implementation defaults and can be tuned after playtesting.
+ * The default ratios are cumulative visible-word targets. The corrective
+ * gameplay curve intentionally starts at 40% visible (60% masked), then
+ * advances to 55%, 70%, and 80% visible (45%, 30%, and 20% masked).
  */
 export const DEFAULT_REVEAL_CONFIG: RevealConfig = Object.freeze({
-  1: 0.3,
-  2: 0.5,
+  1: 0.4,
+  2: 0.55,
   3: 0.7,
   4: 0.8,
 });
@@ -25,7 +26,7 @@ export const DEFAULT_REVEAL_CONFIG: RevealConfig = Object.freeze({
  * A small set of low-information words used as early lyric anchors.
  * Content words are still revealed when the target exceeds this group.
  */
-const COMMON_WORD_ANCHORS: ReadonlySet<string> = new Set([
+export const COMMON_WORD_ANCHORS: ReadonlySet<string> = new Set([
   "a",
   "an",
   "the",
@@ -193,36 +194,75 @@ export function getRevealTargetCount(
   return getRevealTarget(totalWordCount, attempt, config).targetVisibleWordCount;
 }
 
-function getRevealOrder(wordTokens: readonly LyricToken[], seed: string): LyricToken[] {
-  const anchorTokens: LyricToken[] = [];
-  const contentTokens: LyricToken[] = [];
-
-  for (const token of wordTokens) {
-    if (COMMON_WORD_ANCHORS.has(token.normalized)) {
-      anchorTokens.push(token);
-    } else {
-      contentTokens.push(token);
-    }
-  }
-
-  const shuffledAnchors = seededShuffle(anchorTokens, `${seed}:lyric-reveal:anchors`);
-  const shuffledContent = seededShuffle(contentTokens, `${seed}:lyric-reveal:content`);
-
-  return [...shuffledAnchors, ...shuffledContent];
+function collectWordTokens(window: TokenizedLyricWindow): LyricToken[] {
+  return window.flatMap((line) =>
+    line.tokens.filter((token) => token.isWord && token.state !== "static"),
+  );
 }
 
-function collectWordTokens(window: TokenizedLyricWindow): LyricToken[] {
-  const wordTokens: LyricToken[] = [];
+/**
+ * Build one canonical reveal order for the whole question. The order is
+ * independent of token state, so applying it again for Hard/Medium/Easy can
+ * only reveal later members of the same seeded plan.
+ *
+ * A meaningful anchor is approximated conservatively as a lexical word that
+ * is not in COMMON_WORD_ANCHORS. We choose up to two per semantic line, in
+ * seeded order, then interleave the first anchor from each eligible line
+ * before distributing second anchors. Lines without a content word use their
+ * first lexical word as a deterministic fallback. Remaining words are
+ * seeded after the anchor floor.
+ */
+function getRevealOrder(
+  window: TokenizedLyricWindow,
+  seed: string,
+): LyricToken[] {
+  const lineWords = window.map((line) =>
+    line.tokens.filter(
+      (token) => token.isWord && token.state !== "static",
+    ),
+  );
+  const preferredByLine: LyricToken[][] = lineWords.map((words, lineIndex) => {
+    if (words.length === 0) {
+      return [];
+    }
 
-  for (const line of window) {
-    for (const token of line.tokens) {
-      if (token.isWord && token.state !== "static") {
-        wordTokens.push(token);
+    const contentWords = words.filter(
+      (token) => !COMMON_WORD_ANCHORS.has(token.normalized),
+    );
+
+    if (contentWords.length === 0) {
+      // A common-word-only line still gets one playable, deterministic clue.
+      return [
+        seededShuffle(words, `${seed}:lyric-reveal:fallback:${lineIndex}`)[0],
+      ].filter((token): token is LyricToken => token !== undefined);
+    }
+
+    return seededShuffle(
+      contentWords,
+      `${seed}:lyric-reveal:content:${lineIndex}`,
+    ).slice(0, 2);
+  });
+
+  const preferredIds = new Set<string>();
+  const orderedPreferred: LyricToken[] = [];
+
+  for (let rank = 0; rank < 2; rank += 1) {
+    for (const line of preferredByLine) {
+      const token = line[rank];
+
+      if (token !== undefined && !preferredIds.has(token.id)) {
+        preferredIds.add(token.id);
+        orderedPreferred.push(token);
       }
     }
   }
 
-  return wordTokens;
+  const remaining = seededShuffle(
+    collectWordTokens(window).filter((token) => !preferredIds.has(token.id)),
+    `${seed}:lyric-reveal:remaining`,
+  );
+
+  return [...orderedPreferred, ...remaining];
 }
 
 /**
@@ -244,7 +284,18 @@ export function applyRevealForAttempt(
 
   const wordTokens = collectWordTokens(window);
   const targetCount = getRevealTargetCount(wordTokens.length, attempt, config);
-  const scheduledTokens = new Set(getRevealOrder(wordTokens, seed).slice(0, targetCount));
+  const visibleIds = new Set(
+    wordTokens
+      .filter((token) => token.state === "solved" || token.state === "revealed")
+      .map((token) => token.id),
+  );
+  const additionalCount = Math.max(0, targetCount - visibleIds.size);
+  const scheduledIds = new Set(
+    getRevealOrder(window, seed)
+      .filter((token) => !visibleIds.has(token.id))
+      .slice(0, additionalCount)
+      .map((token) => token.id),
+  );
 
   return window.map((line) => {
     let lineChanged = false;
@@ -258,7 +309,7 @@ export function applyRevealForAttempt(
         return token;
       }
 
-      if (!scheduledTokens.has(token)) {
+      if (!scheduledIds.has(token.id)) {
         return token;
       }
 

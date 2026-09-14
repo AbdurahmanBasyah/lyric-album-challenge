@@ -4,7 +4,9 @@ import {
   ChallengeStateError,
   createChallengeState,
   createGuessResponse,
+  getBestSolvedSongStreak,
   getCurrentSolvedSongStreak,
+  getPerfectQuestionCount,
   isPerfectQuestion,
   renderChallenge,
   renderQuestion,
@@ -326,10 +328,10 @@ describe("server-controlled challenge state", () => {
     const view = renderChallenge(completed);
     expect(view.complete).toBe(true);
     expect(view.score?.songs).toEqual([
-      { questionId: "question-1", score: 6 },
+      { questionId: "question-1", score: 7 },
       { questionId: "question-2", score: 100 },
     ]);
-    expect(view.score?.total).toBe(53);
+    expect(view.score?.total).toBe(54);
   });
 
   it("reports an attempt-2 solve as non-Perfect and preserves the immutable prior state", () => {
@@ -387,6 +389,20 @@ describe("server-controlled challenge state", () => {
     const complete = updateChallengeQuestion(secondState, thirdTransition);
     expect(thirdTransition.result).toBe("failed");
     expect(getCurrentSolvedSongStreak(complete.questions)).toBe(0);
+  });
+
+  it("derives the maximum solved-song run and Perfect count from terminal facts", () => {
+    const questions = [
+      { status: "solved" as const, attempt: 1 as const },
+      { status: "solved" as const, attempt: 2 as const },
+      { status: "failed" as const, attempt: 4 as const },
+      { status: "solved" as const, attempt: 1 as const },
+      { status: "solved" as const, attempt: 1 as const },
+      { status: "active" as const, attempt: 1 as const },
+    ];
+
+    expect(getBestSolvedSongStreak(questions)).toBe(2);
+    expect(getPerfectQuestionCount(questions)).toBe(3);
   });
 
   it("progressively reveals cumulative hints and fails with the selected fragment", () => {

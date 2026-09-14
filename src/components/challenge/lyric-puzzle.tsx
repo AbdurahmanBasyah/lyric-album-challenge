@@ -1,9 +1,12 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 
-import type { ChallengeQuestionView } from "../../types/challenge";
+import type {
+  ChallengeQuestionView,
+  ChallengeRenderedToken,
+} from "../../types/challenge";
 
 export type HiddenSlotDescriptor = Readonly<{
   id: string;
@@ -11,16 +14,29 @@ export type HiddenSlotDescriptor = Readonly<{
   blankNumber: number;
 }>;
 
+/**
+ * These are client-only presentation states. The server continues to expose
+ * only hidden/solved/revealed/static token states.
+ */
+export type LyricWordUiState =
+  | "static"
+  | "hidden"
+  | "focused"
+  | "draft"
+  | "focused-draft"
+  | "solved"
+  | "revealed";
+
 const HIDDEN_PLACEHOLDER_PATTERN = /^_+$/u;
-const MIN_INPUT_WIDTH_CH = 3;
+const MIN_INPUT_WIDTH_CH = 4;
 const INPUT_WIDTH_BUFFER_CH = 1;
 const INPUT_VIEWPORT_CAP = "42vw";
+const MAX_DRAFT_LENGTH = 256;
 
 /**
- * Keep each answer slot proportional to the server-provided word-length hint
- * without allowing a long word to force horizontal overflow on small screens.
- * The placeholder itself remains untouched and is still rendered by the
- * browser, so this only controls the input's layout width.
+ * Keep each gap proportional to the server-provided underscore placeholder.
+ * The placeholder is safe to use for layout because it contains no answer
+ * text; answer values never cross this component boundary.
  */
 export function getResponsiveBlankWidth(placeholder: string): string {
   const placeholderLength = HIDDEN_PLACEHOLDER_PATTERN.test(placeholder)
@@ -59,6 +75,89 @@ export function getHiddenSlotDescriptors(
   return Object.freeze(slots);
 }
 
+export function getFirstUnresolvedGapId(
+  question: ChallengeQuestionView,
+): string | null {
+  return getHiddenSlotDescriptors(question)[0]?.id ?? null;
+}
+
+/**
+ * Return the next unresolved gap in reading order. This helper is used by the
+ * game shell when an attempt changes; ordinary keyboard traversal remains the
+ * browser's native Tab/Shift+Tab order between the inline inputs.
+ */
+export function getNextUnresolvedGapId(
+  question: ChallengeQuestionView,
+  currentGapId: string | null,
+): string | null {
+  const slots = getHiddenSlotDescriptors(question);
+
+  if (slots.length === 0) {
+    return null;
+  }
+
+  const currentIndex = slots.findIndex((slot) => slot.id === currentGapId);
+  return slots[currentIndex >= 0 ? (currentIndex + 1) % slots.length : 0]?.id ?? null;
+}
+
+export function getGapAccessibleLabel(slot: HiddenSlotDescriptor): string {
+  return `Missing word ${slot.blankNumber} on line ${slot.lineNumber}`;
+}
+
+export type GapKeyboardEventLike = Readonly<{
+  key: string;
+  isComposing?: boolean;
+  nativeEvent?: Readonly<{
+    isComposing?: boolean;
+    keyCode?: number;
+  }>;
+}>;
+
+/**
+ * Browsers expose composition state on both the React event and its native
+ * event. Some engines still report keyCode 229 while an IME is composing.
+ */
+export function isImeCompositionActive(event: GapKeyboardEventLike): boolean {
+  return (
+    event.isComposing === true ||
+    event.nativeEvent?.isComposing === true ||
+    event.nativeEvent?.keyCode === 229
+  );
+}
+
+/**
+ * Enter is never a gap-navigation action. Returning true lets the input
+ * handler suppress both implicit form submission and any browser-specific
+ * default while preserving all composition/input events.
+ */
+export function shouldSuppressGapEnter(
+  event: GapKeyboardEventLike,
+): boolean {
+  return event.key === "Enter";
+}
+
+export function getLyricWordUiState(
+  token: ChallengeRenderedToken,
+  activeGapId: string | null,
+  draft: string | undefined,
+): LyricWordUiState {
+  if (token.state !== "hidden") {
+    return token.state;
+  }
+
+  const hasDraft = typeof draft === "string" && draft.trim().length > 0;
+
+  if (activeGapId === token.id) {
+    return hasDraft ? "focused-draft" : "focused";
+  }
+
+  return hasDraft ? "draft" : "hidden";
+}
+
+export function getGapDisplayValue(draft: string | undefined): string {
+  return typeof draft === "string" && draft.trim().length > 0 ? draft : "";
+}
+
 export function buildSubmittedAnswers(
   question: ChallengeQuestionView,
   drafts: Readonly<Record<string, string>>,
@@ -76,56 +175,173 @@ export function buildSubmittedAnswers(
   return Object.freeze(answers);
 }
 
+function renderSolvedToken(
+  token: ChallengeRenderedToken,
+  reducedMotion: boolean,
+) {
+  return (
+    <motion.span
+      className="ftl-lyric-token ftl-lyric-token--solved"
+      key={token.id}
+      aria-label="Player-solved lyric word, solved and locked"
+      initial={reducedMotion ? false : { opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }}
+    >
+      {token.text}
+    </motion.span>
+  );
+}
+
+function renderRevealedToken(
+  token: ChallengeRenderedToken,
+  reducedMotion: boolean,
+) {
+  return (
+    <motion.span
+      className="ftl-lyric-token ftl-lyric-token--revealed"
+      key={token.id}
+      aria-label="System-revealed lyric word, revealed hint"
+      initial={reducedMotion ? false : { opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: reducedMotion ? 0 : 0.28, ease: "easeOut" }}
+    >
+      {token.text}
+    </motion.span>
+  );
+}
+
+function renderInlineGap({
+  token,
+  descriptor,
+  questionId,
+  draft,
+  uiState,
+  disabled,
+  autoFocus,
+  reducedMotion,
+  onSelectGap,
+  onDraftChange,
+}: {
+  token: ChallengeRenderedToken;
+  descriptor: HiddenSlotDescriptor;
+  questionId: string;
+  draft: string;
+  uiState: LyricWordUiState;
+  disabled: boolean;
+  autoFocus: boolean;
+  reducedMotion: boolean;
+  onSelectGap: (tokenId: string) => void;
+  onDraftChange: (tokenId: string, value: string) => void;
+}) {
+  const visibleValue = getGapDisplayValue(draft);
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (!shouldSuppressGapEnter(event)) {
+      // In particular, do not intercept Tab. Native DOM order is the reading
+      // order of unresolved inputs, so Tab and Shift+Tab work naturally.
+      return;
+    }
+
+    // Let the IME own Enter so it can commit the composing text. The form has
+    // no submit control and its submit guard prevents an accidental guess.
+    if (isImeCompositionActive(event)) {
+      return;
+    }
+
+    // Ordinary Enter is never navigation or implicit validation.
+    event.preventDefault();
+  };
+
+  return (
+    <motion.span
+      className={`ftl-lyric-gap-wrap ftl-lyric-gap-wrap--${uiState}`}
+      key={token.id}
+      initial={false}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: reducedMotion ? 0 : 0.16, ease: "easeOut" }}
+    >
+      <input
+        className="ftl-lyric-gap"
+        id={`lyric-gap-${questionId}-${token.id}`}
+        type="text"
+        value={visibleValue}
+        placeholder={token.text}
+        aria-label={getGapAccessibleLabel(descriptor)}
+        aria-describedby={`lyric-puzzle-help-${questionId}`}
+        autoComplete="off"
+        autoCapitalize="none"
+        autoCorrect="off"
+        inputMode="text"
+        spellCheck={false}
+        maxLength={MAX_DRAFT_LENGTH}
+        disabled={disabled}
+        autoFocus={autoFocus}
+        style={{ width: getResponsiveBlankWidth(token.text) }}
+        onFocus={() => onSelectGap(token.id)}
+        onChange={(event) => {
+          // onChange can be delivered before a browser focus event in a few
+          // assistive/mobile flows, so keep activeGapId authoritative here too.
+          onSelectGap(token.id);
+          onDraftChange(token.id, event.currentTarget.value);
+        }}
+        onKeyDown={handleKeyDown}
+      />
+    </motion.span>
+  );
+}
+
 export function LyricPuzzle({
   question,
   drafts,
+  activeGapId,
   disabled,
+  onSelectGap,
   onDraftChange,
+  children,
 }: {
   question: ChallengeQuestionView;
   drafts: Readonly<Record<string, string>>;
+  activeGapId: string | null;
   disabled: boolean;
+  onSelectGap: (tokenId: string) => void;
   onDraftChange: (tokenId: string, value: string) => void;
+  children?: ReactNode;
 }) {
   const prefersReducedMotion = useReducedMotion();
   const reducedMotion = prefersReducedMotion ?? false;
   const hiddenIds = new Set(question.hiddenTokenIds);
-  const firstInputRef = useRef<HTMLInputElement | null>(null);
-  const descriptors = new Map(
-    getHiddenSlotDescriptors(question).map((slot) => [slot.id, slot]),
-  );
-
-  // Focus only when a question/attempt changes. Draft edits do not change
-  // these keys, so typing never gets interrupted by a rerender. The parent
-  // disables the inputs while a guess is in flight; wait until the new state
-  // is interactive before moving focus.
-  useEffect(() => {
-    if (disabled) {
-      return;
-    }
-
-    firstInputRef.current?.focus();
-  }, [disabled, question.attempt, question.id]);
+  const slots = getHiddenSlotDescriptors(question);
+  const descriptors = new Map(slots.map((slot) => [slot.id, slot]));
+  const firstGapId = slots[0]?.id ?? null;
+  const autoFocusGapId = activeGapId ?? firstGapId;
 
   return (
     <section
-      className="lyric-puzzle-surface glass-panel glass-panel-strong min-w-0 rounded-[1.5rem] px-4 py-6 shadow-[0_28px_80px_rgba(2,2,15,0.24)] sm:px-7 sm:py-8"
+      className="ftl-lyric-stage"
       aria-labelledby={`lyric-puzzle-heading-${question.id}`}
     >
-      <h2
-        className="sr-only"
-        id={`lyric-puzzle-heading-${question.id}`}
-      >
+      <div className="ftl-lyric-stage__topline">
+        <p className="ftl-lyric-stage__eyebrow">Four-line lyric stage</p>
+        <p
+          className="ftl-lyric-stage__progress"
+          aria-label="Current lyric progress"
+        >
+          {question.progress.solved} of {question.progress.totalAnswerTokens} solved
+        </p>
+      </div>
+      <h2 className="sr-only" id={`lyric-puzzle-heading-${question.id}`}>
         Four-line lyric puzzle
       </h2>
       <p className="sr-only" id={`lyric-puzzle-help-${question.id}`}>
-        Fill each hidden lyric word. Solved words are locked, and revealed
-        words are hints.
+        Each missing lyric word is an inline answer field. Type in a gap and
+        use Tab or Shift+Tab to move between gaps. Check Words validates the
+        current attempt. Solved words are locked, and revealed words are hints.
       </p>
-      <div className="space-y-4 sm:space-y-5">
+      <div className="ftl-lyric-lines">
         {question.lines.map((line, lineIndex) => (
           <p
-            className="lyric-puzzle-line min-w-0 text-[clamp(1.18rem,2.4vw,1.75rem)] font-medium leading-[1.85] tracking-[-0.025em] text-[var(--foreground)]"
+            className="ftl-gameplay-lyric-line"
             key={`${question.id}-line-${lineIndex}`}
           >
             <span className="sr-only">Line {lineIndex + 1}: </span>
@@ -137,63 +353,40 @@ export function LyricPuzzle({
                 hiddenIds.has(token.id) &&
                 descriptor !== undefined
               ) {
-                return (
-                  <input
-                    className="lyric-puzzle-input mx-1 inline-block h-[2.15rem] max-w-[42vw] rounded-md border border-[rgba(216,185,255,0.42)] bg-[rgba(8,11,33,0.78)] px-1.5 text-center font-mono text-[0.86em] text-[var(--foreground)] caret-[var(--teal)] outline-none transition-[border-color,box-shadow,background-color] placeholder:text-[var(--muted)] focus:border-[var(--teal)] focus:bg-[rgba(17,22,51,0.92)] focus:shadow-[0_0_0_3px_rgba(157,240,209,0.13)] disabled:cursor-wait disabled:opacity-65"
-                    key={token.id}
-                    ref={descriptor.blankNumber === 1 ? firstInputRef : undefined}
-                    id={`answer-${question.id}-${token.id}`}
-                    type="text"
-                    value={drafts[token.id] ?? ""}
-                    placeholder={token.text}
-                    style={{ width: getResponsiveBlankWidth(token.text) }}
-                    aria-label={`Line ${descriptor.lineNumber}, blank ${descriptor.blankNumber}, hidden answer`}
-                    aria-describedby={`lyric-puzzle-help-${question.id}`}
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    inputMode="text"
-                    spellCheck={false}
-                    maxLength={256}
-                    disabled={disabled}
-                    onChange={(event) =>
-                      onDraftChange(token.id, event.currentTarget.value)
-                    }
-                  />
+                const draft = drafts[token.id] ?? "";
+                const uiState = getLyricWordUiState(
+                  token,
+                  activeGapId,
+                  draft,
                 );
+
+                return renderInlineGap({
+                  token,
+                  descriptor,
+                  questionId: question.id,
+                  draft,
+                  uiState,
+                  disabled,
+                  autoFocus: autoFocusGapId === token.id,
+                  reducedMotion,
+                  onSelectGap,
+                  onDraftChange,
+                });
               }
 
               if (token.state === "solved") {
-                return (
-                  <motion.span
-                    className="inline rounded-md border border-[rgba(157,240,209,0.48)] bg-[rgba(157,240,209,0.12)] px-1 py-0.5 text-[var(--teal)] shadow-[0_0_18px_rgba(157,240,209,0.08)]"
-                    key={token.id}
-                    aria-label={`${token.text}, solved and locked`}
-                    initial={false}
-                    animate={{ scale: reducedMotion ? 1 : [1, 1.06, 1] }}
-                    transition={{ duration: reducedMotion ? 0 : 0.32 }}
-                  >
-                    {token.text}
-                    <span className="ml-1 text-[0.58em] font-bold" aria-hidden="true">
-                      ✓
-                    </span>
-                  </motion.span>
-                );
+                return renderSolvedToken(token, reducedMotion);
               }
 
               if (token.state === "revealed") {
-                return (
-                  <span
-                    className="inline rounded-sm border-b border-dashed border-[var(--accent)] text-[var(--accent-strong)]"
-                    key={token.id}
-                    aria-label={`${token.text}, revealed hint`}
-                  >
-                    {token.text}
-                  </span>
-                );
+                return renderRevealedToken(token, reducedMotion);
               }
 
               return (
-                <span className="whitespace-pre-wrap" key={token.id}>
+                <span
+                  className="ftl-lyric-token ftl-lyric-token--static"
+                  key={token.id}
+                >
                   {token.text}
                 </span>
               );
@@ -201,6 +394,7 @@ export function LyricPuzzle({
           </p>
         ))}
       </div>
+      {children}
     </section>
   );
 }

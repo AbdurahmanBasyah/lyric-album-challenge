@@ -34,6 +34,16 @@ import type {
 } from "../../types/challenge";
 import type { TrackSummary } from "../../types/tracks";
 import { parsePublicPlaylistUrl } from "../public-playlist/url";
+import {
+  getBestSolvedSongStreak,
+  isPerfectQuestion,
+} from "./challenge-result-metrics";
+
+export {
+  getBestSolvedSongStreak,
+  getPerfectQuestionCount,
+  isPerfectQuestion,
+} from "./challenge-result-metrics";
 
 export const MAX_ATTEMPTS = 4 as const;
 export const MAX_CHALLENGE_QUESTIONS = 5;
@@ -677,13 +687,8 @@ export function getCurrentSolvedSongStreak(
 /** Alias for callers that use a domain-neutral derivation name. */
 export const deriveChallengeStreak = getCurrentSolvedSongStreak;
 
-/** Perfect is a terminal achievement, independent of its numeric score. */
-export function isPerfectQuestion(
-  question: Pick<ChallengeQuestionState, "status" | "attempt">,
-  attemptsUsed: AttemptNumber = question.attempt,
-): boolean {
-  return question.status === "solved" && attemptsUsed === 1;
-}
+/** Domain-neutral alias used by result presentation. */
+export const deriveBestStreak = getBestSolvedSongStreak;
 
 function createChallengeScoreView(
   questions: readonly ChallengeQuestionState[],
